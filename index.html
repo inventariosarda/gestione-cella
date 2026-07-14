@@ -159,7 +159,7 @@
             const notifCont = document.getElementById('custom-notification');
             const notifBox = document.getElementById('notification-box');
             const notifMsg = document.getElementById('notification-message');
-            notifMsg.innerText = messaggio;
+            notifMsg.innerText = mensaje = messaggio;
             if (tipo === 'successo') notifBox.className = "p-4 rounded-xl flex justify-between text-white font-bold bg-green-600";
             else if (tipo === 'errore') notifBox.className = "p-4 rounded-xl flex justify-between text-white font-bold bg-red-600";
             else notifBox.className = "p-4 rounded-xl flex justify-between text-white font-bold bg-blue-600";
@@ -205,13 +205,11 @@
             else { status.innerText = "Offline (Usa dati locali)"; status.className = "text-xs text-red-300"; }
         }
 
-        // FORMATTAZIONE DATA SICURA: Evita slittamenti di fuso orario estraendo solo la stringa pura AAAA-MM-GG
         function estraiDataPura(stringaData) {
             if (!stringaData) return "";
             if (stringaData.includes("T")) {
                 return stringaData.split("T")[0];
             }
-            // Gestione date provenienti da Google Sheet in formato esteso o stringa
             let d = new Date(stringaData);
             if (!isNaN(d.getTime())) {
                 let anno = d.getFullYear();
@@ -222,7 +220,6 @@
             return stringaData;
         }
 
-        // SINCRONIZZAZIONE: SCARICA DATI DAL FOGLIO GOOGLE
         async function scaricaDatiDaCloud() {
             if (!navigator.onLine || GOOGLE_SCRIPT_URL.includes("INSERISCI_QUI")) return;
             document.getElementById('sync-text').innerText = "Download...";
@@ -236,7 +233,7 @@
                         idProdotto: item.idProdotto,
                         prodottoNome: item.prodottoNome,
                         lotto: item.lotto,
-                        scadenza: estraiDataPura(item.scadenza), // data protetta
+                        scadenza: estraiDataPura(item.scadenza),
                         quantita: item.quantita
                     }));
                     await db.giacenze.bulkAdd(formattedData);
@@ -249,9 +246,13 @@
             }
         }
 
-        // SINCRONIZZAZIONE: INVIA DATI AL FOGLIO GOOGLE
         async function inviaDatiACloud() {
-            if (!navigator.onLine || GOOGLE_SCRIPT_URL.includes("INSERISCI_QUI")) return;
+            if (GOOGLE_SCRIPT_URL.includes("INSERISCI_QUI")) return;
+            if (!navigator.onLine) {
+                document.getElementById('sync-text').innerText = "Sincronizza Cloud";
+                mostraNotifica("Salvato sul telefono! Ricordati di sincronizzare quando c'è campo.", "info");
+                return;
+            }
             document.getElementById('sync-text').innerText = "Invio Cloud...";
             try {
                 const locali = await db.giacenze.toArray();
@@ -259,7 +260,7 @@
                     idProdotto: l.idProdotto,
                     prodottoNome: l.prodottoNome,
                     lotto: l.lotto,
-                    scadenza: estraiDataPura(l.scadenza), // invia formato testo puro AAAA-MM-GG
+                    scadenza: estraiDataPura(l.scadenza),
                     quantita: l.quantita
                 }));
                 
@@ -272,13 +273,38 @@
                 document.getElementById('sync-text').innerText = "Sincronizzato";
             } catch (e) {
                 document.getElementById('sync-text').innerText = "Errore Invio";
+                mostraNotifica("Errore invio cloud. Dati salvati sul telefono.", "errore");
             }
         }
 
         async function sincronizzaCloud() {
-            mostraNotifica("Allineamento con la cella in corso...", "info");
-            await scaricaDatiDaCloud();
-            mostraNotifica("Giacenze Cloud Allineate!");
+            if (!navigator.onLine) {
+                return mostraNotifica("Nessuna connessione internet disponibile!", "errore");
+            }
+            // Prima invia lo stato locale attuale al cloud
+            document.getElementById('sync-text').innerText = "Allineamento...";
+            try {
+                const locali = await db.giacenze.toArray();
+                const datiProtetti = locali.map(l => ({
+                    idProdotto: l.idProdotto,
+                    prodottoNome: l.prodottoNome,
+                    lotto: l.lotto,
+                    scadenza: estraiDataPura(l.scadenza),
+                    quantita: l.quantita
+                }));
+                await fetch(GOOGLE_SCRIPT_URL, {
+                    method: "POST",
+                    mode: "no-cors",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(datiProtetti)
+                });
+                // Poi scarica i dati freschi completi
+                await scaricaDatiDaCloud();
+                mostraNotifica("Giacenze Cloud Allineate!");
+            } catch (e) {
+                mostraNotifica("Errore durante l'allineamento cloud.", "errore");
+                document.getElementById('sync-text').innerText = "Errore Sync";
+            }
         }
 
         function switchTab(tabId) {
@@ -309,7 +335,7 @@
             if(!stringaData) return "";
             const parti = stringaData.split("-");
             if(parti.length === 3) {
-                return `${parti[2]}/${parti[1]}/${parti[0]}`; // Da AAAA-MM-GG a GG/MM/AAAA puro
+                return `${parti[2]}/${parti[1]}/${parti[0]}`;
             }
             return new Date(stringaData).toLocaleDateString('it-IT');
         }
@@ -369,7 +395,7 @@
         }
 
         async function eliminaProdotto(id) {
-            if (confirm("Vuoi eliminare l'articolo e le sue giacenze?")) {
+            if (confirm("Vuoi eliminare l'articolo e le ses giacenze?")) {
                 await db.prodotti.delete(id);
                 await db.giacenze.where('idProdotto').equals(id).delete();
                 await caricaProdotti();
@@ -390,12 +416,15 @@
 
             const scadenza = estraiDataPura(scadenzaRaw);
             const prodottoObj = await db.prodotti.get(idProdotto);
+            const nomeProdottoSicuro = prodottoObj ? prodottoObj.nome : "Articolo Sconosciuto";
+
             const recordEsistente = await db.giacenze.where({ idProdotto: idProdotto, lotto: lotto, scadenza: scadenza }).first();
 
+            // SALVATAGGIO LOCALE PRIORITARIO (FUNZIONA ANCHE OFFLINE)
             if (recordEsistente) {
                 await db.giacenze.update(recordEsistente.id, { quantita: recordEsistente.quantita + quantita });
             } else {
-                await db.giacenze.add({ idProdotto: idProdotto, productoNome: prodottoObj.nome, lotto: lotto, scadenza: scadenza, quantita: quantita });
+                await db.giacenze.add({ idProdotto: idProdotto, prodottoNome: nomeProdottoSicuro, lotto: lotto, scadenza: scadenza, quantita: quantita });
             }
 
             mostraNotifica(`Caricate ${quantita} pedane del Lotto ${lotto}`);
@@ -403,6 +432,7 @@
             document.getElementById('mov-lotto').value = "";
             document.getElementById('mov-scadenza').value = "";
             
+            // Prova l'invio cloud ma non blocca l'app se fallisce
             await inviaDatiACloud();
             switchTab('giacenza');
         }
@@ -535,7 +565,7 @@
                     }
                 }
             }
-            mostraNotifica("Inventario allineato!");
+            mostraNotifica("Inventario salvato!");
             await inviaDatiACloud();
             switchTab('giacenza');
         }
