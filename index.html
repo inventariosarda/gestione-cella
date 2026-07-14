@@ -12,6 +12,16 @@
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <title>Gestione Pedane Grattugiato</title>
+    
+    <link rel="apple-touch-icon" href="icona.png">
+    
+    <link rel="icon" type="image/png" sizes="192x192" href="icona.png">
+    <link rel="icon" type="image/png" sizes="512x512" href="icona.png">
+    
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="mobile-web-app-capable" content="yes">
+
     <script src="https://unpkg.com/dexie@latest/dist/dexie.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
@@ -134,7 +144,7 @@
     </nav>
 
     <script>
-        const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwLoo9i7DxIFwcuiKSP1dv1DEBdMd9YPN59o_9qqGo7tAsutI6ua3UjEQF6_-ItSwSM/exec";
+        const GOOGLE_SCRIPT_URL = "INSERISCI_QUI_URL_DELLA_TUA_WEB_APP_GOOGLE";
 
         const db = new Dexie("DatabaseGrattugiatoCondiviso");
         db.version(1).stores({
@@ -164,23 +174,52 @@
             window.addEventListener('online', aggiornaStatoConnessione);
             window.addEventListener('offline', aggiornaStatoConnessione);
 
-            const countProd = await db.prodotti.count();
-            if (countProd === 0) {
-                await db.prodotti.bulkAdd([
-                    { nome: "BRONZETTO 100gr" },
-                    { nome: "PASCOLI ITALIANI 100gr" },
-                    { nome: "BUONA SPESA 100gr" }
-                ]);
+            try {
+                const countProd = await db.prodotti.count();
+                if (countProd === 0) {
+                    await db.prodotti.bulkAdd([
+                        { nome: "BRONZETTO 100gr" },
+                        { nome: "PASCOLI ITALIANI 100gr" },
+                        { nome: "BUONA SPESA 100gr" }
+                    ]);
+                }
+                await caricaProdotti();
+                
+                if (!GOOGLE_SCRIPT_URL.includes("INSERISCI_QUI")) {
+                    scaricaDatiDaCloud().catch(err => {
+                        console.error("Errore cloud iniziale:", err);
+                        document.getElementById('sync-text').innerText = "Errore Cloud";
+                    });
+                } else {
+                    document.getElementById('sync-text').innerText = "Configura URL";
+                    await renderGiacenze();
+                }
+            } catch (error) {
+                console.error("Errore nell'inizializzazione:", error);
             }
-            await caricaProdotti();
-            // Scarica i dati aggiornati dal cloud all'avvio
-            await scaricaDatiDaCloud();
         }
 
         function aggiornaStatoConnessione() {
             const status = document.getElementById('connection-status');
             if (navigator.onLine) { status.innerText = "Dispositivo Connesso"; status.className = "text-xs text-green-300"; }
             else { status.innerText = "Offline (Usa dati locali)"; status.className = "text-xs text-red-300"; }
+        }
+
+        // FORMATTAZIONE DATA SICURA: Evita slittamenti di fuso orario estraendo solo la stringa pura AAAA-MM-GG
+        function estraiDataPura(stringaData) {
+            if (!stringaData) return "";
+            if (stringaData.includes("T")) {
+                return stringaData.split("T")[0];
+            }
+            // Gestione date provenienti da Google Sheet in formato esteso o stringa
+            let d = new Date(stringaData);
+            if (!isNaN(d.getTime())) {
+                let anno = d.getFullYear();
+                let mese = String(d.getMonth() + 1).padStart(2, '0');
+                let giorno = String(d.getDate()).padStart(2, '0');
+                return `${anno}-${mese}-${giorno}`;
+            }
+            return stringaData;
         }
 
         // SINCRONIZZAZIONE: SCARICA DATI DAL FOGLIO GOOGLE
@@ -193,18 +232,13 @@
                 
                 await db.giacenze.clear();
                 if (cloudData.length > 0) {
-                    // Formatta le date ricevute correttamente
-                    const formattedData = cloudData.map(item => {
-                        let d = new Date(item.scadenza);
-                        let isoDate = isNaN(d.getTime()) ? item.scadenza : d.toISOString().split('T')[0];
-                        return {
-                            idProdotto: item.idProdotto,
-                            prodottoNome: item.prodottoNome,
-                            lotto: item.lotto,
-                            scadenza: isoDate,
-                            quantita: item.quantita
-                        };
-                    });
+                    const formattedData = cloudData.map(item => ({
+                        idProdotto: item.idProdotto,
+                        prodottoNome: item.prodottoNome,
+                        lotto: item.lotto,
+                        scadenza: estraiDataPura(item.scadenza), // data protetta
+                        quantita: item.quantita
+                    }));
                     await db.giacenze.bulkAdd(formattedData);
                 }
                 await renderGiacenze();
@@ -221,11 +255,19 @@
             document.getElementById('sync-text').innerText = "Invio Cloud...";
             try {
                 const locali = await db.giacenze.toArray();
+                const datiProtetti = locali.map(l => ({
+                    idProdotto: l.idProdotto,
+                    prodottoNome: l.prodottoNome,
+                    lotto: l.lotto,
+                    scadenza: estraiDataPura(l.scadenza), // invia formato testo puro AAAA-MM-GG
+                    quantita: l.quantita
+                }));
+                
                 await fetch(GOOGLE_SCRIPT_URL, {
                     method: "POST",
-                    mode: "no-cors", // Permette comunicazioni cross-origin con Google Apps Script
+                    mode: "no-cors",
                     headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify(locali)
+                    body: JSON.stringify(datiProtetti)
                 });
                 document.getElementById('sync-text').innerText = "Sincronizzato";
             } catch (e) {
@@ -263,6 +305,15 @@
             aggiornaVistaMovimento();
         }
 
+        function visualizzaDataItaliana(stringaData) {
+            if(!stringaData) return "";
+            const parti = stringaData.split("-");
+            if(parti.length === 3) {
+                return `${parti[2]}/${parti[1]}/${parti[0]}`; // Da AAAA-MM-GG a GG/MM/AAAA puro
+            }
+            return new Date(stringaData).toLocaleDateString('it-IT');
+        }
+
         async function aggiornaVistaMovimento() {
             const idProdotto = parseInt(document.getElementById('mov-prodotto').value);
             const containerCarico = document.getElementById('container-carico-manuale');
@@ -287,7 +338,7 @@
                         <button onclick="apriModalePrelievo(${l.id})" class="w-full text-left p-3 border border-gray-200 bg-gray-50 rounded-xl flex justify-between items-center active:scale-95">
                             <div>
                                 <div class="font-bold text-gray-900">Lotto: ${l.lotto}</div>
-                                <div class="text-xs text-gray-500">Scadenza: ${new Date(l.scadenza).toLocaleDateString('it-IT')}</div>
+                                <div class="text-xs text-gray-500">Scadenza: ${visualizzaDataItaliana(l.scadenza)}</div>
                             </div>
                             <span class="bg-blue-100 text-blue-800 font-extrabold px-3 py-1 rounded-lg text-sm">${l.quantita} pedane</span>
                         </button>
@@ -331,19 +382,20 @@
             const idProdotto = parseInt(document.getElementById('mov-prodotto').value);
             const quantita = parseInt(document.getElementById('mov-quantita').value);
             const lotto = document.getElementById('mov-lotto').value.trim().toUpperCase();
-            const scadenza = document.getElementById('mov-scadenza').value;
+            const scadenzaRaw = document.getElementById('mov-scadenza').value;
 
-            if (isNaN(idProdotto) || isNaN(quantita) || quantita <= 0 || !lotto || !scadenza) {
+            if (isNaN(idProdotto) || isNaN(quantita) || quantita <= 0 || !lotto || !scadenzaRaw) {
                 return mostraNotifica("Compila tutti i campi obbligatori!", "errore");
             }
 
+            const scadenza = estraiDataPura(scadenzaRaw);
             const prodottoObj = await db.prodotti.get(idProdotto);
             const recordEsistente = await db.giacenze.where({ idProdotto: idProdotto, lotto: lotto, scadenza: scadenza }).first();
 
             if (recordEsistente) {
                 await db.giacenze.update(recordEsistente.id, { quantita: recordEsistente.quantita + quantita });
             } else {
-                await db.giacenze.add({ idProdotto: idProdotto, prodottoNome: prodottoObj.nome, lotto: lotto, scadenza: scadenza, quantita: quantita });
+                await db.giacenze.add({ idProdotto: idProdotto, productoNome: prodottoObj.nome, lotto: lotto, scadenza: scadenza, quantita: quantita });
             }
 
             mostraNotifica(`Caricate ${quantita} pedane del Lotto ${lotto}`);
@@ -351,7 +403,7 @@
             document.getElementById('mov-lotto').value = "";
             document.getElementById('mov-scadenza').value = "";
             
-            await inviaDatiACloud(); // Invia subito al foglio condiviso
+            await inviaDatiACloud();
             switchTab('giacenza');
         }
 
@@ -359,9 +411,9 @@
             const record = await db.giacenze.get(idGiacenza);
             if (!record) return;
             lottoScaricandoSelezionato = record;
-            document.getElementById('modal-prod-nome').innerText = record.prodottoNome;
+            document.getElementById('modal-prod-nome').innerText = record.prodottoNome || "Articolo";
             document.getElementById('modal-lotto-nome').innerText = record.lotto;
-            document.getElementById('modal-scad-data').innerText = new Date(record.scadenza).toLocaleDateString('it-IT');
+            document.getElementById('modal-scad-data').innerText = visualizzaDataItaliana(record.scadenza);
             document.getElementById('modal-disp-qta').innerText = record.quantita;
             document.getElementById('modal-quantita-prelievo').value = "1";
             document.getElementById('modal-quantita-prelievo').max = record.quantita;
@@ -385,7 +437,7 @@
             mostraNotifica(`Prelevate ${qtaPrelevare} pedane del Lotto ${recordGiacenza.lotto}`);
             chiudiModalePrelievo();
             
-            await inviaDatiACloud(); // Allinea foglio condiviso
+            await inviaDatiACloud();
             switchTab('giacenza');
         }
 
@@ -398,8 +450,9 @@
             }
             const raggruppato = {};
             giacenze.forEach(g => {
-                if (!raggruppato[g.prodottoNome]) raggruppato[g.prodottoNome] = [];
-                raggruppato[g.prodottoNome].push(g);
+                let nomeProd = g.prodottoNome || "Articolo Sconosciuto";
+                if (!raggruppato[nomeProd]) raggruppato[nomeProd] = [];
+                raggruppato[nomeProd].push(g);
             });
 
             let html = '';
@@ -417,7 +470,7 @@
                 lotti.forEach(l => {
                     html += `
                         <div class="flex justify-between items-center py-2 text-sm">
-                            <div><span class="font-semibold text-gray-700">Lotto: ${l.lotto}</span><span class="mx-2 text-gray-400">|</span><span class="text-gray-500">Scad: ${new Date(l.scadenza).toLocaleDateString('it-IT')}</span></div>
+                            <div><span class="font-semibold text-gray-700">Lotto: ${l.lotto}</span><span class="mx-2 text-gray-400">|</span><span class="text-gray-500">Scad: ${visualizzaDataItaliana(l.scadenza)}</span></div>
                             <span class="font-bold text-gray-900">${l.quantita} pedane</span>
                         </div>
                     `;
@@ -443,7 +496,7 @@
                     html += `
                         <div class="flex items-center gap-2 border-b pb-2 row-lotto" data-id-giacenza="${g.id}">
                             <input type="text" value="${g.lotto}" class="w-1/4 p-2 border rounded text-sm uppercase font-bold inv-lotto">
-                            <input type="date" value="${g.scadenza}" class="w-2/5 p-2 border rounded text-sm inv-scadenza">
+                            <input type="date" value="${estraiDataPura(g.scadenza)}" class="w-2/5 p-2 border rounded text-sm inv-scadenza">
                             <input type="number" value="${g.quantita}" class="w-1/5 p-2 border rounded text-sm text-center font-bold inv-qta">
                             <button onclick="this.parentElement.remove()" class="text-red-500 p-2 font-bold">✕</button>
                         </div>
@@ -475,10 +528,10 @@
                 await db.giacenze.where('idProdotto').equals(idProdotto).delete();
                 for (const riga of righe) {
                     const lotto = riga.querySelector('.inv-lotto').value.trim().toUpperCase();
-                    const scadenza = riga.querySelector('.inv-scadenza').value;
+                    const scadenzaRaw = riga.querySelector('.inv-scadenza').value;
                     const quantita = parseInt(riga.querySelector('.inv-qta').value);
-                    if (lotto && scadenza && !isNaN(quantita)) {
-                        await db.giacenze.add({ idProdotto: idProdotto, prodottoNome: nomeProdotto, lotto: lotto, scadenza: scadenza, quantita: quantita });
+                    if (lotto && scadenzaRaw && !isNaN(quantita)) {
+                        await db.giacenze.add({ idProdotto: idProdotto, prodottoNome: nomeProdotto, lotto: lotto, scadenza: estraiDataPura(scadenzaRaw), quantita: quantita });
                     }
                 }
             }
