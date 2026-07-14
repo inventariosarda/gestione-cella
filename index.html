@@ -177,10 +177,7 @@
                 await caricaProdotti();
                 
                 if (!GOOGLE_SCRIPT_URL.includes("INSERISCI_QUI")) {
-                    scaricaDatiDaCloud().catch(err => {
-                        console.error("Errore cloud iniziale:", err);
-                        document.getElementById('sync-text').innerText = "Errore Cloud";
-                    });
+                    await scaricaDatiDaCloud();
                 } else {
                     document.getElementById('sync-text').innerText = "Configura URL";
                     await renderGiacenze();
@@ -218,21 +215,22 @@
                 const response = await fetch(GOOGLE_SCRIPT_URL);
                 const cloudData = await response.json();
                 
-                await db.giacenze.clear();
-                if (cloudData.length > 0) {
-                    const formattedData = cloudData.map(item => ({
-                        idProdotto: item.idProdotto,
-                        prodottoNome: item.prodottoNome,
-                        lotto: item.lotto,
-                        scadenza: estraiDataPura(item.scadenza),
-                        quantita: item.quantita
-                    }));
-                    await db.giacenze.bulkAdd(formattedData);
+                if (Array.isArray(cloudData)) {
+                    await db.giacenze.clear();
+                    if (cloudData.length > 0) {
+                        const formattedData = cloudData.map(item => ({
+                            idProdotto: parseInt(item.idProdotto),
+                            prodottoNome: item.prodottoNome,
+                            lotto: item.lotto,
+                            scadenza: estraiDataPura(item.scadenza),
+                            quantita: parseInt(item.quantita)
+                        }));
+                        await db.giacenze.bulkAdd(formattedData);
+                    }
+                    document.getElementById('sync-text').innerText = "Sincronizzato";
                 }
-                await renderGiacenze();
-                document.getElementById('sync-text').innerText = "Sincronizzato";
             } catch (e) {
-                console.error(e);
+                console.error("Errore download:", e);
                 document.getElementById('sync-text').innerText = "Errore Sync";
             }
         }
@@ -257,14 +255,14 @@
                 
                 await fetch(GOOGLE_SCRIPT_URL, {
                     method: "POST",
-                    mode: "no-cors",
-                    headers: { "Content-Type": "application/json" },
+                    headers: { "Content-Type": "text/plain;charset=utf-8" },
                     body: JSON.stringify(datiProtetti)
                 });
                 document.getElementById('sync-text').innerText = "Sincronizzato";
             } catch (e) {
+                console.error("Errore invio cloud:", e);
                 document.getElementById('sync-text').innerText = "Errore Invio";
-                mostraNotifica("Errore invio cloud. Dati salvati sul telefono.", "errore");
+                mostraNotifica("Errore invio cloud. Dati al sicuro sul telefono.", "errore");
             }
         }
 
@@ -282,28 +280,39 @@
                     scadenza: estraiDataPura(l.scadenza),
                     quantita: l.quantita
                 }));
+                
+                // Inviamo lo stato corrente senza blocchi cors
                 await fetch(GOOGLE_SCRIPT_URL, {
                     method: "POST",
-                    mode: "no-cors",
-                    headers: { "Content-Type": "application/json" },
+                    headers: { "Content-Type": "text/plain;charset=utf-8" },
                     body: JSON.stringify(datiProtetti)
                 });
+                
+                // Scarichiamo immediatamente i dati aggiornati del foglio condiviso
                 await scaricaDatiDaCloud();
-                mostraNotifica("Giacenze Cloud Allineate!");
+                await renderGiacenze();
+                mostraNotifica("Giacenze Cloud Allineate con tutti i dispositivi!");
             } catch (e) {
+                console.error(e);
                 mostraNotifica("Errore durante l'allineamento cloud.", "errore");
                 document.getElementById('sync-text').innerText = "Errore Sync";
             }
         }
 
-        function switchTab(tabId) {
+        async function switchTab(tabId) {
             document.querySelectorAll('.tab-content').forEach(s => s.classList.add('hidden'));
             document.getElementById(`section-${tabId}`).classList.remove('hidden');
             document.querySelectorAll('nav button').forEach(b => b.classList.remove('active-tab'));
             document.getElementById(`nav-${tabId}`).classList.add('active-tab');
-            if (tabId === 'giacenza') renderGiacenze();
-            if (tabId === 'inventario') renderInventario();
-            if (tabId === 'movimentazione') aggiornaVistaMovimento();
+            
+            // Tentiamo una sincronizzazione automatica silenziosa quando ci si sposta di tab
+            if (navigator.onLine && !GOOGLE_SCRIPT_URL.includes("INSERISCI_QUI")) {
+                await scaricaDatiDaCloud();
+            }
+            
+            if (tabId === 'giacenza') await renderGiacenze();
+            if (tabId === 'inventario') await renderInventario();
+            if (tabId === 'movimentazione') await aggiornaVistaMovimento();
         }
 
         function setTipoMovimento(tipo) {
@@ -368,7 +377,7 @@
             document.getElementById('setup-lista-prodotti').innerHTML = list.map(p => `
                 <li class="flex justify-between items-center py-3"><span class="font-medium">${p.nome}</span><button onclick="eliminaProdotto(${p.id})" class="text-red-500 text-sm">Elimina</button></li>
             `).join('');
-            aggiornaVistaMovimento();
+            await aggiornaVistaMovimento();
         }
 
         async function aggiungiProdotto() {
