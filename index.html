@@ -13,15 +13,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <title>Gestione Pedane Grattugiato</title>
     
-    <link rel="apple-touch-icon" href="icona.png">
-    
-    <link rel="icon" type="image/png" sizes="192x192" href="icona.png">
-    <link rel="icon" type="image/png" sizes="512x512" href="icona.png">
-    
-    <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <meta name="mobile-web-app-capable" content="yes">
-
     <script src="https://unpkg.com/dexie@latest/dist/dexie.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
@@ -159,7 +150,7 @@
             const notifCont = document.getElementById('custom-notification');
             const notifBox = document.getElementById('notification-box');
             const notifMsg = document.getElementById('notification-message');
-            notifMsg.innerText = mensaje = messaggio;
+            notifMsg.innerText = messaggio;
             if (tipo === 'successo') notifBox.className = "p-4 rounded-xl flex justify-between text-white font-bold bg-green-600";
             else if (tipo === 'errore') notifBox.className = "p-4 rounded-xl flex justify-between text-white font-bold bg-red-600";
             else notifBox.className = "p-4 rounded-xl flex justify-between text-white font-bold bg-blue-600";
@@ -255,8 +246,8 @@
             }
             document.getElementById('sync-text').innerText = "Invio Cloud...";
             try {
-                const locali = await db.giacenze.toArray();
-                const datiProtetti = locali.map(l => ({
+                const locales = await db.giacenze.toArray();
+                const datiProtetti = locales.map(l => ({
                     idProdotto: l.idProdotto,
                     prodottoNome: l.prodottoNome,
                     lotto: l.lotto,
@@ -281,11 +272,10 @@
             if (!navigator.onLine) {
                 return mostraNotifica("Nessuna connessione internet disponibile!", "errore");
             }
-            // Prima invia lo stato locale attuale al cloud
             document.getElementById('sync-text').innerText = "Allineamento...";
             try {
-                const locali = await db.giacenze.toArray();
-                const datiProtetti = locali.map(l => ({
+                const locales = await db.giacenze.toArray();
+                const datiProtetti = locales.map(l => ({
                     idProdotto: l.idProdotto,
                     prodottoNome: l.prodottoNome,
                     lotto: l.lotto,
@@ -298,7 +288,6 @@
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify(datiProtetti)
                 });
-                // Poi scarica i dati freschi completi
                 await scaricaDatiDaCloud();
                 mostraNotifica("Giacenze Cloud Allineate!");
             } catch (e) {
@@ -395,7 +384,7 @@
         }
 
         async function eliminaProdotto(id) {
-            if (confirm("Vuoi eliminare l'articolo e le ses giacenze?")) {
+            if (confirm("Vuoi eliminare l'articolo e le sue giacenze?")) {
                 await db.prodotti.delete(id);
                 await db.giacenze.where('idProdotto').equals(id).delete();
                 await caricaProdotti();
@@ -420,7 +409,6 @@
 
             const recordEsistente = await db.giacenze.where({ idProdotto: idProdotto, lotto: lotto, scadenza: scadenza }).first();
 
-            // SALVATAGGIO LOCALE PRIORITARIO (FUNZIONA ANCHE OFFLINE)
             if (recordEsistente) {
                 await db.giacenze.update(recordEsistente.id, { quantita: recordEsistente.quantita + quantita });
             } else {
@@ -432,7 +420,6 @@
             document.getElementById('mov-lotto').value = "";
             document.getElementById('mov-scadenza').value = "";
             
-            // Prova l'invio cloud ma non blocca l'app se fallisce
             await inviaDatiACloud();
             switchTab('giacenza');
         }
