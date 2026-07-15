@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Log e Dispositivi</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 p-4">
+    <div class="max-w-4xl mx-auto space-y-8">
+        <h1 class="text-2xl font-bold">Amministrazione Sistema</h1>
+        
+        <div class="bg-white p-6 rounded-xl shadow">
+            <h2 class="text-lg font-bold mb-4">ID DISPOSITIVI</h2>
+            <div id="lista-dispositivi" class="space-y-2"></div>
+        </div>
+
+        <div class="bg-white p-6 rounded-xl shadow">
+            <h2 class="text-lg font-bold mb-4">LOG ATTIVITÀ</h2>
+            <table class="w-full text-sm text-left">
+                <thead class="bg-gray-50 uppercase">
+                    <tr><th class="p-2">Data</th><th class="p-2">Dispositivo</th><th class="p-2">Azione</th></tr>
+                </thead>
+                <tbody id="log-body"></tbody>
+            </table>
+        </div>
+    </div>
+
+    <script>
+        const GOOGLE_SCRIPT_URL = "URL_DELLA_TUA_WEB_APP?page=log"; // Aggiungi ?page=log
+
+        async function caricaDati() {
+            const res = await fetch(GOOGLE_SCRIPT_URL);
+            const data = await res.json();
+            
+            // Render Dispositivi
+            const dispContainer = document.getElementById('lista-dispositivi');
+            data.dispositivi.slice(1).forEach(d => {
+                dispContainer.innerHTML += `<div>${d[0]}: <strong>${d[1]}</strong></div>`;
+            });
+
+            // Render Log
+            const logBody = document.getElementById('log-body');
+            data.log.slice(1).reverse().forEach(l => {
+                logBody.innerHTML += `<tr><td class="p-2 border-t">${new Date(l[0]).toLocaleString()}</td><td class="p-2 border-t">${l[1]}</td><td class="p-2 border-t">${l[2]}</td></tr>`;
+            });
+        }
+        caricaDati();
+    </script>
+</body>
+</html>
