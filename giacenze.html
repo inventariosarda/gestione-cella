@@ -44,14 +44,21 @@
         const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwLoo9i7DxIFwcuiKSP1dv1DEBdMd9YPN59o_9qqGo7tAsutI6ua3UjEQF6_-ItSwSM/exec";
 
         // Funzione per formattare la data nel formato italiano (GG/MM/AAAA)
-        function visualizzaDataItaliana(stringaData) {
+function visualizzaDataItaliana(stringaData) {
             if (!stringaData) return "";
-            const dataPulita = stringaData.toString().replace("'", "");
+            
+            // 1. Estrai solo la parte della data (YYYY-MM-DD) se presente la T
+            let dataPulita = stringaData.toString().split('T')[0];
+            
+            // 2. Verifica se è nel formato corretto YYYY-MM-DD
             const parti = dataPulita.split("-");
             if (parti.length === 3) {
+                // Formato: 2026-09-29 -> 29/09/2026
                 return `${parti[2]}/${parti[1]}/${parti[0]}`;
             }
-            return new Date(dataPulita).toLocaleDateString('it-IT');
+            
+            // 3. Fallback per date già formattate o formati diversi
+            return dataPulita;
         }
 
         // Recupera i dati dal Cloud e li elabora mostrando anche gli articoli a zero
