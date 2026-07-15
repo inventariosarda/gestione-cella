@@ -212,12 +212,22 @@
             } catch (e) { console.error(e); }
         }
 
-        async function inviaProdottiACloud() {
-            if (!navigator.onLine || GOOGLE_SCRIPT_URL.includes("INSERISCI_QUI")) return;
-            try {
-                await fetch(GOOGLE_SCRIPT_URL, { method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify({ action: "syncProdotti", lista: await db.prodotti.toArray() }) });
-            } catch (e) { console.error(e); }
-        }
+async function inviaProdottiACloud() {
+    if (GOOGLE_SCRIPT_URL.includes("INSERISCI_QUI") || !navigator.onLine) return;
+    try {
+        const listaProdottiLocali = await db.prodotti.toArray();
+        await fetch(GOOGLE_SCRIPT_URL, {
+            method: "POST",
+            headers: { "Content-Type": "text/plain;charset=utf-8" },
+            body: JSON.stringify({
+                action: "syncProdotti", // <--- Questo è il comando chiave per Google Script
+                lista: listaProdottiLocali
+            })
+        });
+    } catch (e) {
+        console.error("Errore sincronizzazione catalogo:", e);
+    }
+}
 
         async function sincronizzaCloud() {
             if (!navigator.onLine) return mostraNotifica("Offline!", "errore");
@@ -250,25 +260,23 @@
         }
 
 async function eliminaProdotto(id) {
-    if (!confirm("Eliminare questo prodotto e tutte le sue giacenze?")) return;
-    
-    // 1. Elimina le giacenze e il prodotto dal database locale
-    await db.giacenze.where('idProdotto').equals(id).delete();
-    await db.prodotti.delete(id);
-    
-    // --- AGGIUNGI QUESTE DUE RIGHE ---
-    // 2. Forza l'invio della nuova lista prodotti "pulita" al Cloud
-    await inviaProdottiACloud(); 
-    // 3. Forza l'invio della nuova situazione giacenze "pulita" al Cloud
-    await inviaDatiACloud(); 
-    // ---------------------------------
-    
-    // 4. Aggiorna l'interfaccia
-    await caricaProdottiInterfaccia();
-    await renderGiacenze();
-    mostraNotifica("Prodotto eliminato con successo e sincronizzato sul cloud");
+    if (confirm("Vuoi eliminare l'articolo e le sue giacenze da tutti i dispositivi?")) {
+        // 1. Elimina dal database locale
+        await db.prodotti.delete(id);
+        await db.giacenze.where('idProdotto').equals(id).delete();
+        
+        // 2. FORZA l'invio immediato al Cloud dell'anagrafica aggiornata
+        await inviaProdottiACloud(); 
+        
+        // 3. FORZA l'invio immediato al Cloud delle giacenze aggiornate
+        await inviaDatiACloud(); 
+        
+        // 4. Aggiorna la vista
+        await caricaProdottiInterfaccia();
+        await aggiornaVistaMovimento();
+        mostraNotifica("Articolo rimosso e sincronizzato.");
+    }
 }
-    
 
         // --- MOVIMENTAZIONE ---
         function setTipoMovimento(tipo) {
