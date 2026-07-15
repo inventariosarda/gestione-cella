@@ -567,40 +567,60 @@
             switchTab('giacenza');
         }
 
-        async function renderGiacenze() {
-            const giacenze = await db.giacenze.toArray();
+async function renderGiacenze() {
+            // 1. Recuperiamo tutti i prodotti e tutte le giacenze
+            const tuttiProdotti = await db.prodotti.toArray();
+            const tutteGiacenze = await db.giacenze.toArray();
+            
             const container = document.getElementById('giacenza-lista');
-            if (giacenze.length === 0) {
-                container.innerHTML = `<div class="bg-white p-6 rounded-xl text-center text-gray-500">Cella vuota. Registra movimenti.</div>`;
+            
+            if (tuttiProdotti.length === 0) {
+                container.innerHTML = `<div class="bg-white p-6 rounded-xl text-center text-gray-500">Nessun prodotto a catalogo. Vai in Setup per aggiungerne.</div>`;
                 return;
             }
-            const raggruppato = {};
-            giacenze.forEach(g => {
-                let nomeProd = g.prodottoNome || "Articolo Sconosciuto";
-                if (!raggruppato[nomeProd]) raggruppato[nomeProd] = [];
-                raggruppato[nomeProd].push(g);
-            });
+
+            // 2. Ordiniamo i prodotti per nome
+            tuttiProdotti.sort((a, b) => a.nome.localeCompare(b.nome));
 
             let html = '';
-            for (const [prodotto, lotti] of Object.entries(raggruppato)) {
+            
+            for (const p of tuttiProdotti) {
+                // Filtriamo le giacenze per questo prodotto specifico
+                const lotti = tutteGiacenze.filter(g => g.idProdotto === p.id);
                 lotti.sort((a, b) => new Date(a.scadenza) - new Date(b.scadenza));
+                
                 const totale = lotti.reduce((acc, curr) => acc + curr.quantita, 0);
+                const badgeColor = totale > 0 ? 'bg-blue-600' : 'bg-gray-400';
+
                 html += `
                     <div class="bg-white rounded-xl shadow-md overflow-hidden border">
                         <div class="bg-blue-50 px-4 py-3 flex justify-between items-center border-b">
-                            <span class="font-bold text-blue-900">${prodotto}</span>
-                            <span class="bg-blue-600 text-white text-xs px-2.5 py-1 rounded-full font-bold">Tot: ${totale}</span>
+                            <span class="font-bold text-blue-900">${p.nome}</span>
+                            <span class="${badgeColor} text-white text-xs px-2.5 py-1 rounded-full font-bold">Tot: ${totale}</span>
                         </div>
                         <div class="p-3 divide-y">
                 `;
-                lotti.forEach(l => {
+
+                if (lotti.length === 0) {
                     html += `
-                        <div class="flex justify-between items-center py-2 text-sm">
-                            <div><span class="font-semibold text-gray-700">Lotto: ${l.lotto}</span><span class="mx-2 text-gray-400">|</span><span class="text-gray-500">Scad: ${visualizzaDataItaliana(l.scadenza)}</span></div>
-                            <span class="font-bold text-gray-900">${l.quantita} pedane</span>
+                        <div class="text-center text-gray-400 py-3 text-sm italic">
+                            Nessuna pedana in cella
                         </div>
                     `;
-                });
+                } else {
+                    lotti.forEach(l => {
+                        html += `
+                            <div class="flex justify-between items-center py-2 text-sm">
+                                <div>
+                                    <span class="font-semibold text-gray-700">Lotto: ${l.lotto}</span>
+                                    <span class="mx-2 text-gray-400">|</span>
+                                    <span class="text-gray-500">Scad: ${visualizzaDataItaliana(l.scadenza)}</span>
+                                </div>
+                                <span class="font-bold text-gray-900">${l.quantita} pedane</span>
+                            </div>
+                        `;
+                    });
+                }
                 html += `</div></div>`;
             }
             container.innerHTML = html;
