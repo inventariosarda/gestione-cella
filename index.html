@@ -249,19 +249,20 @@
             mostraNotifica("Prodotto aggiunto!");
         }
 
-        async function eliminaProdotto(id) {
-            if (confirm("Vuoi eliminare l'articolo e tutte le sue giacenze?")) {
-                // CORREZIONE: Elimina il prodotto e tutte le giacenze collegate
-                await db.giacenze.where('idProdotto').equals(id).delete();
-                await db.prodotti.delete(id);
-                
-                await inviaProdottiACloud();
-                await inviaDatiACloud();
-                await caricaProdottiInterfaccia();
-                await aggiornaVistaMovimento();
-                mostraNotifica("Articolo e giacenze rimosse.");
-            }
-        }
+async function eliminaProdotto(id) {
+    if (!confirm("Eliminare questo prodotto e tutte le sue giacenze?")) return;
+    
+    // 1. Elimina le giacenze legate a quel prodotto
+    await db.giacenze.where('idProdotto').equals(id).delete();
+    // 2. Elimina il prodotto
+    await db.prodotti.delete(id);
+    
+    // 3. Aggiorna tutto
+    await caricaProdottiInterfaccia();
+    await renderGiacenze();
+    mostraNotifica("Prodotto eliminato con successo");
+}
+    
 
         // --- MOVIMENTAZIONE ---
         function setTipoMovimento(tipo) {
@@ -339,17 +340,35 @@
         }
 
         // --- GIACENZA E TABS ---
-        async function renderGiacenze() {
-            const giacenze = await db.giacenze.toArray();
-            const container = document.getElementById('giacenza-lista');
-            if (giacenze.length === 0) { container.innerHTML = `<div class="p-6 text-center">Cella vuota.</div>`; return; }
-            let html = '';
-            const raggruppato = giacenze.reduce((acc, g) => { (acc[g.prodottoNome] = acc[g.prodottoNome] || []).push(g); return acc; }, {});
-            for (const [nome, lotti] of Object.entries(raggruppato)) {
-                html += `<div class="bg-white rounded-xl shadow p-4"><h3 class="font-bold text-blue-900 border-b pb-2 mb-2">${nome}</h3>` + lotti.map(l => `<div class="flex justify-between py-1 text-sm"><span>Lotto: ${l.lotto} (Scad: ${l.scadenza})</span><span class="font-bold">${l.quantita}</span></div>`).join('') + `</div>`;
-            }
-            container.innerHTML = html;
+async function renderGiacenze() {
+    const container = document.getElementById('giacenza-lista');
+    const prodotti = await db.prodotti.toArray(); // Prende solo i prodotti validi
+    container.innerHTML = ''; // Pulisce la vista
+
+    for (const p of prodotti) {
+        // Cerca le giacenze solo per questo prodotto esistente
+        const lotti = await db.giacenze.where('idProdotto').equals(p.id).toArray();
+        
+        if (lotti.length > 0) {
+            let htmlLotti = lotti.map(l => 
+                `<div class="flex justify-between py-1 text-sm">
+                    <span>Lotto: ${l.lotto} (Scad: ${l.scadenza})</span>
+                    <span class="font-bold">${l.quantita}</span>
+                </div>`
+            ).join('');
+
+            container.innerHTML += `
+                <div class="bg-white rounded-xl shadow p-4 mb-3">
+                    <h3 class="font-bold text-blue-900 border-b pb-2 mb-2">${p.nome}</h3>
+                    ${htmlLotti}
+                </div>`;
         }
+    }
+    
+    if (container.innerHTML === '') {
+        container.innerHTML = `<div class="p-6 text-center text-gray-500">Nessuna giacenza disponibile.</div>`;
+    }
+}
 
         async function switchTab(tabId) {
             currentActiveTab = tabId;
@@ -362,26 +381,39 @@
         }
 
         // --- INVENTARIO ---
-        async function renderInventario() {
-            const prodotti = await db.prodotti.toArray();
-            const container = document.getElementById('inventario-container');
-            let html = '';
-            for (const p of prodotti) {
-                const lotti = await db.giacenze.where('idProdotto').equals(p.id).toArray();
-                html += `<div class="bg-white p-4 rounded-xl shadow border-l-4 border-red-500" data-id-prodotto="${p.id}">
-                    <h3 class="font-bold mb-2">${p.nome}</h3><div id="lotti-inv-${p.id}">` + lotti.map(g => `
-                    <div class="flex items-center gap-2 pb-2 row-lotto"><input type="text" value="${g.lotto}" class="w-1/4 p-1 border rounded text-sm inv-lotto"><input type="date" value="${g.scadenza}" class="w-2/5 p-1 border rounded text-sm inv-scadenza"><input type="number" value="${g.quantita}" class="w-1/5 p-1 border rounded text-sm inv-qta"><button onclick="this.parentElement.remove()" class="text-red-500">✕</button></div>
-                    `).join('') + `</div><button onclick="aggiungiRigaInv(${p.id})" class="text-sm text-blue-600 font-bold">+ Aggiungi</button></div>`;
-            }
-            container.innerHTML = html;
-        }
+async function renderInventario() {
+    const container = document.getElementById('inventario-container');
+    const prodotti = await db.prodotti.toArray(); // Filtro fondamentale
+    container.innerHTML = '';
 
-        function aggiungiRigaInv(id) {
-            const div = document.createElement('div');
-            div.className = "flex items-center gap-2 pb-2 row-lotto";
-            div.innerHTML = `<input type="text" placeholder="Lotto" class="w-1/4 p-1 border rounded text-sm inv-lotto"><input type="date" class="w-2/5 p-1 border rounded text-sm inv-scadenza"><input type="number" value="1" class="w-1/5 p-1 border rounded text-sm inv-qta"><button onclick="this.parentElement.remove()" class="text-red-500">✕</button>`;
-            document.getElementById(`lotti-inv-${id}`).appendChild(div);
-        }
+    for (const p of prodotti) {
+        const lotti = await db.giacenze.where('idProdotto').equals(p.id).toArray();
+        
+        let htmlLotti = lotti.map(g => `
+            <div class="flex items-center gap-2 pb-2 row-lotto">
+                <input type="text" value="${g.lotto}" class="w-1/4 p-1 border rounded text-sm inv-lotto">
+                <input type="date" value="${g.scadenza}" class="w-2/5 p-1 border rounded text-sm inv-scadenza">
+                <input type="number" value="${g.quantita}" class="w-1/5 p-1 border rounded text-sm inv-qta">
+                <button onclick="this.parentElement.remove()" class="text-red-500 p-2 font-bold">✕</button>
+            </div>
+        `).join('');
+
+        container.innerHTML += `
+            <div class="bg-white p-4 rounded-xl shadow mb-4" data-id-prodotto="${p.id}">
+                <h3 class="font-bold mb-2">${p.nome}</h3>
+                <div id="lotti-inventario-${p.id}">${htmlLotti}</div>
+                <button onclick="aggiungiRigaInv(${p.id})" class="text-sm text-blue-600 font-bold mt-2">+ Aggiungi Lotto</button>
+            </div>`;
+    }
+}
+
+function aggiungiRigaInv(id) {
+    const div = document.createElement('div');
+    div.className = "flex items-center gap-2 pb-2 row-lotto";
+    div.innerHTML = `<input type="text" placeholder="Lotto" class="w-1/4 p-1 border rounded text-sm inv-lotto"><input type="date" class="w-2/5 p-1 border rounded text-sm inv-scadenza"><input type="number" value="1" class="w-1/5 p-1 border rounded text-sm inv-qta"><button onclick="this.parentElement.remove()" class="text-red-500">✕</button>`;
+    // Usa l'ID corretto che avevi messo nel renderInventario
+    document.getElementById(`lotti-inventario-${id}`).appendChild(div);
+}
 
         async function salvaInventarioGenerale() {
             const cards = document.querySelectorAll('#inventario-container > div');
