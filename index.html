@@ -547,7 +547,7 @@
             document.getElementById('mov-lotto').value = "";
             document.getElementById('mov-scadenza').value = "";
 
-            await inviaLog("MOVIMENTO", `Scarico: ${qtaPrelevare} ${lottoScaricandoSelezionato.prodottoNome} (Lotto: ${lottoScaricandoSelezionato.lotto})`)
+            await inviaLog("MOVIMENTO", `Carico: ${quantita} ${nomeProdottoSicuro} (Lotto: ${lotto})`);
             
             await inviaDatiACloud();
             switchTab('giacenza');
@@ -583,7 +583,7 @@
             mostraNotifica(`Prelevate ${qtaPrelevare} pedane del Lotto ${recordGiacenza.lotto}`);
             chiudiModalePrelievo();
 
-            await inviaLog("MOVIMENTO", `Scarico: ${qtaPrelevare} ${lottoScaricandoSelezionato.prodottoNome} (Lotto: ${lottoScaricandoSelezionato.lotto})`);
+            await inviaLog("MOVIMENTO", `Prelievo: ${quantita} ${nomeProdottoSicuro} (Lotto: ${lotto})`);
             
             await inviaDatiACloud();
             switchTab('giacenza');
