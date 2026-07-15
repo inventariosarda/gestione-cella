@@ -35,18 +35,17 @@
 
     </main>
 
-    <footer class="bg-gray-200 border-t border-gray-300 py-3 text-center text-xs text-gray-600 font-medium">
+    <footer class="bg-gray-200 border-t border-gray-300 py-3 text-center text-xs text-gray-600 font-medium mt-auto">
         🔒 Modalità Sola Lettura — Reparto Produzione / Spedizioni
     </footer>
 
     <script>
-        // Utilizza lo stesso URL di Google Apps Script della tua app principale
+        // L'URL della tua Web App Google
         const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwLoo9i7DxIFwcuiKSP1dv1DEBdMd9YPN59o_9qqGo7tAsutI6ua3UjEQF6_-ItSwSM/exec";
 
         // Funzione per formattare la data nel formato italiano (GG/MM/AAAA)
         function visualizzaDataItaliana(stringaData) {
             if (!stringaData) return "";
-            // Rimuove eventuali apici inseriti dal sistema di protezione date
             const dataPulita = stringaData.toString().replace("'", "");
             const parti = dataPulita.split("-");
             if (parti.length === 3) {
@@ -55,7 +54,7 @@
             return new Date(dataPulita).toLocaleDateString('it-IT');
         }
 
-        // Recupera i dati direttamente da Google Sheets senza passare da database locali
+        // Recupera i dati dal Cloud e li elabora mostrando anche gli articoli a zero
         async function caricaGiacenzeInTempoReale() {
             const container = document.getElementById('giacenza-lista');
             const loader = document.getElementById('stato-caricamento');
@@ -70,18 +69,32 @@
                 if (!response.ok) throw new Error("Errore di rete");
                 const cloudData = await response.json();
 
-                if (!Array.isArray(cloudData) || cloudData.length === 0) {
+                // I dati ora arrivano divisi in due gruppi
+                const prodotti = cloudData.prodotti || [];
+                const giacenze = cloudData.giacenze || [];
+
+                if (prodotti.length === 0 && giacenze.length === 0) {
                     container.innerHTML = `
                         <div class="bg-white p-8 rounded-xl text-center text-gray-500 border shadow-sm">
-                            📦 La cella è attualmente vuota.<br>Nessun lotto rilevato nel foglio.
+                            📦 Il catalogo è vuoto e la cella è vuota.
                         </div>
                     `;
                 } else {
-                    // Raggruppiamo i dati per Prodotto
                     const raggruppato = {};
-                    cloudData.forEach(item => {
-                        const nomeProd = item.prodottoNome || "Articolo Sconosciuto";
-                        if (!raggruppato[nomeProd]) raggruppato[nomeProd] = [];
+
+                    // 1. Inseriamo PRIMA tutti i prodotti a catalogo (anche quelli che non hanno pedane)
+                    prodotti.forEach(p => {
+                        if (p.nome) {
+                            raggruppato[p.nome.trim().toUpperCase()] = [];
+                        }
+                    });
+
+                    // 2. Smistiamo le pedane effettive dentro i rispettivi prodotti
+                    giacenze.forEach(item => {
+                        const nomeProd = item.prodottoNome ? item.prodottoNome.trim().toUpperCase() : "ARTICOLO SCONOSCIUTO";
+                        if (!raggruppato[nomeProd]) {
+                            raggruppato[nomeProd] = [];
+                        }
                         raggruppato[nomeProd].push({
                             lotto: item.lotto,
                             scadenza: item.scadenza,
@@ -89,46 +102,62 @@
                         });
                     });
 
+                    // Ordiniamo alfabeticamente i nomi dei prodotti per avere una lista coerente
+                    const nomiProdottiOrdinati = Object.keys(raggruppato).sort();
+
                     let html = '';
-                    for (const [prodotto, lotti] of Object.entries(raggruppato)) {
-                        // Ordiniamo i lotti dal più vecchio (in scadenza prima) al più lontano
+                    for (const prodotto of nomiProdottiOrdinati) {
+                        const lotti = raggruppato[prodotto];
+                        
+                        // Ordiniamo i lotti per data di scadenza
                         lotti.sort((a, b) => new Date(a.scadenza) - new Date(b.scadenza));
                         const totalePedane = lotti.reduce((acc, curr) => acc + curr.quantita, 0);
+
+                        // Impostiamo il colore in base alla giacenza (Grigio se è 0, Blu se ci sono pedane)
+                        const badgeColor = totalePedane > 0 ? 'bg-blue-600' : 'bg-gray-400';
 
                         html += `
                             <div class="bg-white rounded-2xl shadow border border-gray-200 overflow-hidden">
                                 <div class="bg-blue-50 px-4 py-3 flex justify-between items-center border-b border-gray-200">
                                     <span class="font-extrabold text-blue-900 tracking-wide">${prodotto}</span>
-                                    <span class="bg-blue-600 text-white text-xs px-3 py-1 rounded-full font-bold">Totale: ${totalePedane}</span>
+                                    <span class="${badgeColor} text-white text-xs px-3 py-1 rounded-full font-bold">Totale: ${totalePedane}</span>
                                 </div>
                                 <div class="p-3 divide-y divide-gray-100">
                         `;
 
-                        lotti.forEach(l => {
+                        // Se ci sono 0 pedane, mostriamo l'etichetta specifica invece di nascondere il prodotto
+                        if (lotti.length === 0) {
                             html += `
-                                <div class="flex justify-between items-center py-2.5 text-sm">
-                                    <div>
-                                        <span class="font-bold text-gray-700">Lotto: ${l.lotto}</span>
-                                        <span class="mx-2 text-gray-300">|</span>
-                                        <span class="text-gray-500 font-medium">Scad: ${visualizzaDataItaliana(l.scadenza)}</span>
-                                    </div>
-                                    <span class="font-black text-gray-900 bg-gray-100 px-2.5 py-1 rounded-lg">${l.quantita} ped.</span>
+                                <div class="text-center text-gray-400 py-3 text-sm font-medium italic">
+                                    Nessuna pedana in cella
                                 </div>
                             `;
-                        });
+                        } else {
+                            lotti.forEach(l => {
+                                html += `
+                                    <div class="flex justify-between items-center py-2.5 text-sm">
+                                        <div>
+                                            <span class="font-bold text-gray-700">Lotto: ${l.lotto}</span>
+                                            <span class="mx-2 text-gray-300">|</span>
+                                            <span class="text-gray-500 font-medium">Scad: ${visualizzaDataItaliana(l.scadenza)}</span>
+                                        </div>
+                                        <span class="font-black text-gray-900 bg-gray-100 px-2.5 py-1 rounded-lg">${l.quantita} ped.</span>
+                                    </div>
+                                `;
+                            });
+                        }
 
                         html += `</div></div>`;
                     }
                     container.innerHTML = html;
                 }
 
-                // Aggiorna l'orario dell'ultimo controllo riuscito
+                // Aggiorna l'orario a schermo
                 const oraAttuale = new Date().toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
                 txtUltimo.innerText = `Ultimo aggiornamento alle ore ${oraAttuale}`;
 
             } catch (error) {
                 console.error("Errore recupero dati:", error);
-                // Se c'è un problema di rete o di server, avvisa l'utente ma non svuota lo schermo se c'era già qualcosa
                 txtUltimo.innerText = "⚠️ Errore di connessione col Server Google";
                 if (container.innerHTML.includes("Inizializzazione") || container.innerHTML.includes("Caricamento")) {
                     container.innerHTML = `
@@ -143,11 +172,11 @@
             }
         }
 
-        // Inizializzazione al caricamento della pagina
+        // Avvio automatico
         window.onload = () => {
             caricaGiacenzeInTempoReale();
             
-            // AUTO-REFRESH AUTOMATICO: La pagina si aggiorna da sola ogni 30 secondi
+            // Refresha la schermata da solo ogni 30 secondi
             setInterval(() => {
                 caricaGiacenzeInTempoReale();
             }, 30000);
