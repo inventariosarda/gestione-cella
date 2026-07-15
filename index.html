@@ -137,6 +137,11 @@
     <script>
         const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwLoo9i7DxIFwcuiKSP1dv1DEBdMd9YPN59o_9qqGo7tAsutI6ua3UjEQF6_-ItSwSM/exec";
 
+        if (!localStorage.getItem('grattugiato_device_id')) {
+            localStorage.setItem('grattugiato_device_id', 'Disp-' + Math.floor(1000 + Math.random() * 9000));
+        }
+        const DEVICE_ID = localStorage.getItem('grattugiato_device_id');
+
         const db = new Dexie("DatabaseGrattugiatoCondiviso");
         db.version(1).stores({
             prodotti: '++id, &nome',
@@ -145,6 +150,8 @@
 
         let tipoMovimentoSelezionato = 'ENTRATA';
         let lottoScaricandoSelezionato = null;
+        let inventarioBloccatoDaMe = false;
+        let currentActiveTab = 'movimentazione';
 
         function mostraNotifica(messaggio, tipo = 'successo') {
             const notifCont = document.getElementById('custom-notification');
@@ -174,7 +181,7 @@
                         { nome: "BUONA SPESA 100GR" }
                     ]);
                 }
-                await caricaProdotti();
+                await caricaProdottiInterfaccia();
                 
                 if (!GOOGLE_SCRIPT_URL.includes("INSERISCI_QUI")) {
                     await scaricaDatiDaCloud();
@@ -189,7 +196,7 @@
 
         function aggiornaStatoConnessione() {
             const status = document.getElementById('connection-status');
-            if (navigator.onLine) { status.innerText = "Dispositivo Connesso"; status.className = "text-xs text-green-300"; }
+            if (navigator.onLine) { status.innerText = "Connesso (" + DEVICE_ID + ")"; status.className = "text-xs text-green-300"; }
             else { status.innerText = "Offline (Usa dati locali)"; status.className = "text-xs text-red-300"; }
         }
 
@@ -213,43 +220,31 @@
             document.getElementById('sync-text').innerText = "Download...";
             try {
                 const response = await fetch(GOOGLE_SCRIPT_URL);
-                const cloudData = await response.json();
+                const cloudRes = await response.json();
                 
-                if (Array.isArray(cloudData)) {
-                    await db.giacenze.clear();
-                    
-                    if (cloudData.length > 0) {
-                        // LOGICA DI AUTO-APPRENDIMENTO DEI NUOVI ARTICOLI
-                        for (const item of cloudData) {
-                            const targetId = parseInt(item.idProdotto);
-                            const targetNome = item.prodottoNome ? item.prodottoNome.trim().toUpperCase() : "";
-                            
-                            if (!isNaN(targetId) && targetNome) {
-                                // Controlla se il prodotto esiste già per ID o per Nome nel catalogo locale
-                                const esistePerId = await db.prodotti.get(targetId);
-                                const esistePerNome = await db.prodotti.where('nome').equals(targetNome).first();
-                                
-                                if (!esistePerId && !esistePerNome) {
-                                    // Se non esiste, lo inserisce mantenendo l'ID coerente del foglio cloud
-                                    await db.prodotti.add({ id: targetId, nome: targetNome });
-                                }
-                            }
-                        }
-                        
-                        // Ricarica la lista prodotti aggiornata in memoria
-                        await caricaProdotti();
-
-                        const formattedData = cloudData.map(item => ({
-                            idProdotto: parseInt(item.idProdotto),
-                            prodottoNome: item.prodottoNome ? item.prodottoNome.trim().toUpperCase() : "Articolo Sconosciuto",
-                            lotto: item.lotto,
-                            scadenza: estraiDataPura(item.scadenza),
-                            quantita: parseInt(item.quantita)
-                        }));
-                        await db.giacenze.bulkAdd(formattedData);
+                // 1. Allineamento Anagrafica Prodotti Centralizzata
+                if (cloudRes.prodotti && Array.isArray(cloudRes.prodotti) && cloudRes.prodotti.length > 0) {
+                    await db.prodotti.clear();
+                    for (const prod of cloudRes.prodotti) {
+                        await db.prodotti.put({ id: parseInt(prod.id), nome: prod.nome.trim().toUpperCase() });
                     }
-                    document.getElementById('sync-text').innerText = "Sincronizzato";
                 }
+                await caricaProdottiInterfaccia();
+
+                // 2. Allineamento Giacenze
+                await db.giacenze.clear();
+                if (cloudRes.giacenze && Array.isArray(cloudRes.giacenze) && cloudRes.giacenze.length > 0) {
+                    const formattedData = cloudRes.giacenze.map(item => ({
+                        idProdotto: parseInt(item.idProdotto),
+                        prodottoNome: item.prodottoNome ? item.prodottoNome.trim().toUpperCase() : "Articolo Sconosciuto",
+                        lotto: item.lotto,
+                        scadenza: estraiDataPura(item.scadenza),
+                        quantita: parseInt(item.quantita)
+                    }));
+                    await db.giacenze.bulkAdd(formattedData);
+                }
+                
+                document.getElementById('sync-text').innerText = "Sincronizzato";
             } catch (e) {
                 console.error("Errore download:", e);
                 document.getElementById('sync-text').innerText = "Errore Sync";
@@ -287,12 +282,32 @@
             }
         }
 
+        async function inviaProdottiACloud() {
+            if (GOOGLE_SCRIPT_URL.includes("INSERISCI_QUI") || !navigator.onLine) return;
+            try {
+                const listaProdottiLocali = await db.prodotti.toArray();
+                await fetch(GOOGLE_SCRIPT_URL, {
+                    method: "POST",
+                    headers: { "Content-Type": "text/plain;charset=utf-8" },
+                    body: JSON.stringify({
+                        action: "syncProdotti",
+                        lista: listaProdottiLocali
+                    })
+                });
+            } catch (e) {
+                console.error("Errore sincronizzazione catalogo articoli:", e);
+            }
+        }
+
         async function sincronizzaCloud() {
             if (!navigator.onLine) {
                 return mostraNotifica("Nessuna connessione internet disponibile!", "errore");
             }
             document.getElementById('sync-text').innerText = "Allineamento...";
             try {
+                // Sincronizza prima i prodotti per sicurezza
+                await inviaProdottiACloud();
+                
                 const locales = await db.giacenze.toArray();
                 const datiProtetti = locales.map(l => ({
                     idProdotto: l.idProdotto,
@@ -319,19 +334,72 @@
         }
 
         async function switchTab(tabId) {
+            if (currentActiveTab === 'inventario' && tabId !== 'inventario' && inventarioBloccatoDaMe) {
+                await rilasciaBloccoInventario();
+            }
+
+            if (tabId === 'inventario') {
+                if (!navigator.onLine) {
+                    mostraNotifica("Impossibile fare inventario offline: serve controllare se altri lo stanno usando!", "errore");
+                    return;
+                }
+                document.getElementById('sync-text').innerText = "Verifica...";
+                const puoEntrare = await richiediBloccoInventario();
+                if (!puoEntrare) return;
+            }
+
+            currentActiveTab = tabId;
             document.querySelectorAll('.tab-content').forEach(s => s.classList.add('hidden'));
             document.getElementById(`section-${tabId}`).classList.remove('hidden');
             document.querySelectorAll('nav button').forEach(b => b.classList.remove('active-tab'));
             document.getElementById(`nav-${tabId}`).classList.add('active-tab');
             
-            if (navigator.onLine && !GOOGLE_SCRIPT_URL.includes("INSERISCI_QUI")) {
+            if (navigator.onLine && !GOOGLE_SCRIPT_URL.includes("INSERISCI_QUI") && tabId !== 'inventario') {
                 await scaricaDatiDaCloud();
             }
             
             if (tabId === 'giacenza') await renderGiacenze();
             if (tabId === 'inventario') await renderInventario();
             if (tabId === 'movimentazione') await aggiornaVistaMovimento();
-            if (tabId === 'setup') await caricaProdotti();
+            if (tabId === 'setup') await caricaProdottiInterfaccia();
+        }
+
+        async function richiediBloccoInventario() {
+            try {
+                const res = await fetch(GOOGLE_SCRIPT_URL, {
+                    method: "POST",
+                    headers: { "Content-Type": "text/plain;charset=utf-8" },
+                    body: JSON.stringify({ action: "lock", user: DEVICE_ID })
+                });
+                const esito = await res.json();
+                if (esito.success) {
+                    inventarioBloccatoDaMe = true;
+                    document.getElementById('sync-text').innerText = "In Inventario";
+                    return true;
+                } else {
+                    mostraNotifica("❌ ACCESSO NEGATO: L'inventario è già aperto sul dispositivo " + esito.lockedBy, "errore");
+                    document.getElementById('sync-text').innerText = "Bloccato";
+                    return false;
+                }
+            } catch (e) {
+                console.error(e);
+                mostraNotifica("Errore di rete durante il controllo accessi.", "errore");
+                return false;
+            }
+        }
+
+        async function rilasciaBloccoInventario() {
+            try {
+                await fetch(GOOGLE_SCRIPT_URL, {
+                    method: "POST",
+                    headers: { "Content-Type": "text/plain;charset=utf-8" },
+                    body: JSON.stringify({ action: "unlock", user: DEVICE_ID })
+                });
+                inventarioBloccatoDaMe = false;
+                document.getElementById('sync-text').innerText = "Sincronizzato";
+            } catch (e) {
+                console.error("Errore sblocco:", e);
+            }
         }
 
         function setTipoMovimento(tipo) {
@@ -392,14 +460,13 @@
             }
         }
 
-        async function caricaProdotti() {
+        async function caricaProdottiInterfaccia() {
             const list = await db.prodotti.toArray();
-            // Ordiniamo alfabeticamente per comodità dell'operatore
             list.sort((a, b) => a.nome.localeCompare(b.nome));
             
             document.getElementById('mov-prodotto').innerHTML = list.map(p => `<option value="${p.id}">${p.nome}</option>`).join('');
             document.getElementById('setup-lista-prodotti').innerHTML = list.map(p => `
-                <li class="flex justify-between items-center py-3"><span class="font-medium">${p.nome}</span><button onclick="eliminaProdotto(${p.id})" class="text-red-500 text-sm">Elimina</button></li>
+                <li class="flex justify-between items-center py-3"><span class="font-medium">${p.nome}</span><button onclick="eliminaProdotto(${p.id})" class="text-red-500 text-sm font-semibold">Elimina</button></li>
             `).join('');
         }
 
@@ -408,22 +475,29 @@
             const nome = nomeInput.value.trim().toUpperCase();
             if (!nome) return mostraNotifica("Nome non valido!", "errore");
             try {
-                // Generiamo un ID timestamp numerico per evitare conflitti tra i vari telefoni offline
                 const nuovoId = Date.now();
                 await db.prodotti.add({ id: nuovoId, nome: nome });
                 nomeInput.value = "";
-                await caricaProdotti();
+                
+                // Forza l'allineamento immediato dell'anagrafica sul cloud
+                await inviaProdottiACloud();
+                
+                await caricaProdottiInterfaccia();
                 await aggiornaVistaMovimento();
-                mostraNotifica("Articolo salvato!");
+                mostraNotifica("Articolo salvato e sincronizzato!");
             } catch (e) { mostraNotifica("Articolo già esistente.", "errore"); }
         }
 
         async function eliminaProdotto(id) {
-            if (confirm("Vuoi eliminare l'articolo e le sue giacenze?")) {
+            if (confirm("Vuoi eliminare l'articolo e le sue giacenze da tutti i dispositivi?")) {
                 await db.prodotti.delete(id);
                 await db.giacenze.where('idProdotto').equals(id).delete();
-                await caricaProdotti();
+                
+                await inviaProdottiACloud();
                 await inviaDatiACloud();
+                
+                await caricaProdottiInterfaccia();
+                await aggiornaVistaMovimento();
                 mostraNotifica("Articolo rimosso.");
             }
         }
@@ -590,6 +664,7 @@
             }
             mostraNotifica("Inventario salvato!");
             await inviaDatiACloud();
+            await rilasciaBloccoInventario();
             switchTab('giacenza');
         }
 
