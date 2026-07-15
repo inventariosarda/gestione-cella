@@ -41,9 +41,10 @@
 
             // Render Log
             const logBody = document.getElementById('log-body');
-            data.log.slice(1).reverse().forEach(l => {
-                logBody.innerHTML += `<tr><td class="p-2 border-t">${new Date(l[0]).toLocaleString()}</td><td class="p-2 border-t">${l[1]}</td><td class="p-2 border-t">${l[2]}</td></tr>`;
-            });
+data.log.slice(1).reverse().forEach(l => {
+    if(!l[0]) return; // Salta righe vuote
+    logBody.innerHTML += `<tr><td class="p-2 border-t">${new Date(l[0]).toLocaleString()}</td><td class="p-2 border-t">${l[1]}</td><td class="p-2 border-t">${l[2]}</td></tr>`;
+});
         }
         caricaDati();
     </script>
