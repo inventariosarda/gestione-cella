@@ -3,13 +3,16 @@
 <head>
     <meta charset="UTF-8">
     <link rel="apple-touch-icon" href="icona.png">
+    
     <link rel="icon" type="image/png" sizes="192x192" href="icona.png">
     <link rel="icon" type="image/png" sizes="512x512" href="icona.png">
+    
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <title>Gestione Pedane Grattugiato</title>
+    
     <script src="https://unpkg.com/dexie@latest/dist/dexie.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
@@ -39,7 +42,12 @@
     <div id="modal-prelievo" class="fixed inset-0 bg-black bg-opacity-50 z-50 hidden flex items-center justify-center p-4">
         <div class="bg-white rounded-2xl p-6 w-full max-w-sm shadow-2xl space-y-4">
             <h3 class="text-lg font-bold text-gray-900 border-b pb-2">📤 Prelievo Pedane</h3>
-            <div id="modal-content" class="text-sm text-gray-600 space-y-1"></div>
+            <div class="text-sm text-gray-600 space-y-1">
+                <p><strong>Articolo:</strong> <span id="modal-prod-nome"></span></p>
+                <p><strong>Lotto:</strong> <span id="modal-lotto-nome"></span></p>
+                <p><strong>Scadenza:</strong> <span id="modal-scad-data"></span></p>
+                <p><strong>Disponibili in cella:</strong> <span id="modal-disp-qta" class="font-bold text-blue-700"></span> pedane</p>
+            </div>
             <div>
                 <label class="block text-sm font-semibold mb-1">Quante pedane vuoi prelevare?</label>
                 <input type="number" id="modal-quantita-prelievo" min="1" value="1" class="w-full p-3 border rounded-lg text-lg text-center font-bold text-blue-900 focus:outline-none">
@@ -52,74 +60,218 @@
     </div>
 
     <main class="flex-grow p-4 max-w-md mx-auto w-full">
+
         <section id="section-movimentazione" class="tab-content">
             <h2 class="text-lg font-bold mb-4 text-blue-900 border-b pb-2">🔄 Movimentazione Pedane</h2>
-            <select id="mov-prodotto" class="w-full p-3 border rounded-lg bg-white text-lg"></select>
-            </section>
-        <section id="section-giacenza" class="tab-content hidden"><div id="giacenza-lista"></div></section>
-        <section id="section-setup" class="tab-content hidden">
-            <input type="text" id="setup-nome-prodotto">
-            <button onclick="aggiungiProdotto()">+ Inserisci</button>
-            <ul id="setup-lista-prodotti"></ul>
+            <div class="bg-white p-4 rounded-xl shadow-md space-y-4">
+                <div>
+                    <label class="block text-sm font-semibold mb-1">Seleziona Prodotto:</label>
+                    <select id="mov-prodotto" onchange="aggiornaVistaMovimento()" class="w-full p-3 border rounded-lg bg-white text-lg"></select>
+                </div>
+                <div>
+                    <label class="block text-sm font-semibold mb-1">Tipo Movimento:</label>
+                    <div class="grid grid-cols-2 gap-2">
+                        <button type="button" id="btn-tipo-entrata" onclick="setTipoMovimento('ENTRATA')" class="py-3 px-4 rounded-lg font-bold border-2 border-green-600 bg-green-50 text-green-700">📥 IN (Creata)</button>
+                        <button type="button" id="btn-tipo-uscita" onclick="setTipoMovimento('USCITA')" class="py-3 px-4 rounded-lg font-bold border-2 border-gray-300 text-gray-500">📤 OUT (Preleva)</button>
+                    </div>
+                </div>
+
+                <div id="container-carico-manuale" class="space-y-4">
+                    <div>
+                        <label class="block text-sm font-semibold mb-1">Numero Pedane da Caricare:</label>
+                        <input type="number" id="mov-quantita" min="1" value="1" class="w-full p-3 border rounded-lg text-lg text-center font-bold">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-semibold mb-1">Lotto:</label>
+                        <input type="text" id="mov-lotto" placeholder="Es. L12345" class="w-full p-3 border rounded-lg text-lg uppercase font-semibold">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-semibold mb-1">Data Scadenza:</label>
+                        <input type="date" id="mov-scadenza" class="w-full p-3 border rounded-lg text-lg">
+                    </div>
+                    <button onclick="registraCarico()" class="w-full bg-green-600 text-white py-4 rounded-xl font-bold text-lg shadow-lg">REGISTRA ENTRATA</button>
+                </div>
+
+                <div id="container-scarico-lotti" class="space-y-3 hidden">
+                    <label class="block text-sm font-semibold text-gray-700">Tocca il lotto da prelevare della cella:</label>
+                    <div id="lista-lotti-prelievo" class="space-y-2 max-h-64 overflow-y-auto pr-1"></div>
+                </div>
+            </div>
         </section>
-        <section id="section-inventario" class="tab-content hidden"><div id="inventario-container"></div></section>
+
+        <section id="section-giacenza" class="tab-content hidden">
+            <h2 class="text-lg font-bold mb-4 text-blue-900 border-b pb-2">📊 Giacenza Attuale Condivisa</h2>
+            <div id="giacenza-lista" class="space-y-3"></div>
+        </section>
+
+        <section id="section-setup" class="tab-content hidden">
+            <h2 class="text-lg font-bold mb-4 text-blue-900 border-b pb-2">⚙️ Setup Prodotti</h2>
+            <div class="bg-white p-4 rounded-xl shadow-md mb-6 space-y-3">
+                <h3 class="font-bold text-gray-700">Aggiungi Nuovo Articolo</h3>
+                <input type="text" id="setup-nome-prodotto" placeholder="Es. Grattugiato 100g" class="w-full p-3 border rounded-lg text-lg">
+                <button onclick="aggiungiProdotto()" class="w-full bg-green-600 text-white py-3 rounded-lg font-bold">+ Inserisci Prodotto</button>
+            </div>
+            <div class="bg-white p-4 rounded-xl shadow-md">
+                <h3 class="font-bold text-gray-700 mb-3">Articoli a Catalogo</h3>
+                <ul id="setup-lista-prodotti" class="divide-y divide-gray-200"></ul>
+            </div>
+        </section>
+
+        <section id="section-inventario" class="tab-content hidden">
+            <div class="border-b pb-2 mb-4 flex justify-between items-center">
+                <h2 class="text-lg font-bold text-blue-900">📝 Rettifica/Inventario</h2>
+                <button onclick="salvaInventarioGenerale()" class="bg-red-600 text-white px-3 py-1.5 rounded-lg text-sm font-bold shadow-md">SALVA TUTTO</button>
+            </div>
+            <div id="inventario-container" class="space-y-4"></div>
+        </section>
+
     </main>
 
+    <nav class="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 flex justify-around py-2 shadow-lg z-50">
+        <button onclick="switchTab('movimentazione')" id="nav-movimentazione" class="flex flex-col items-center justify-center w-full text-xs text-gray-600 font-medium active-tab py-1"><span class="text-xl">🔄</span><span>Movimento</span></button>
+        <button onclick="switchTab('giacenza')" id="nav-giacenza" class="flex flex-col items-center justify-center w-full text-xs text-gray-600 font-medium py-1"><span class="text-xl">📊</span><span>Giacenza</span></button>
+        <button onclick="switchTab('inventario')" id="nav-inventario" class="flex flex-col items-center justify-center w-full text-xs text-gray-600 font-medium py-1"><span class="text-xl">📝</span><span>Inventario</span></button>
+        <button onclick="switchTab('setup')" id="nav-setup" class="flex flex-col items-center justify-center w-full text-xs text-gray-600 font-medium py-1"><span class="text-xl">⚙️</span><span>Setup</span></button>
+    </nav>
+
     <script>
-        const GOOGLE_SCRIPT_URL = "INSERISCI_QUI_IL_TUO_URL_EXEC";
-        const DEVICE_ID = localStorage.getItem('grattugiato_device_id') || ('Disp-' + Math.floor(1000 + Math.random() * 9000));
-        localStorage.setItem('grattugiato_device_id', DEVICE_ID);
+        const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwLoo9i7DxIFwcuiKSP1dv1DEBdMd9YPN59o_9qqGo7tAsutI6ua3UjEQF6_-ItSwSM/exec";
+
+        if (!localStorage.getItem('grattugiato_device_id')) {
+            localStorage.setItem('grattugiato_device_id', 'Disp-' + Math.floor(1000 + Math.random() * 9000));
+        }
+        const DEVICE_ID = localStorage.getItem('grattugiato_device_id');
 
         const db = new Dexie("DatabaseGrattugiatoCondiviso");
-        db.version(1).stores({ prodotti: '++id, &nome', giacenze: '++id, idProdotto, [idProdotto+lotto+scadenza]' });
+        db.version(1).stores({
+            prodotti: '++id, &nome',
+            giacenze: '++id, idProdotto, [idProdotto+lotto+scadenza]'
+        });
 
-        // --- FUNZIONI DI SUPPORTO ---
+        let tipoMovimentoSelezionato = 'ENTRATA';
+        let lottoScaricandoSelezionato = null;
+        let inventarioBloccatoDaMe = false;
+        let currentActiveTab = 'movimentazione';
+
+        function mostraNotifica(messaggio, tipo = 'successo') {
+            const notifCont = document.getElementById('custom-notification');
+            const notifBox = document.getElementById('notification-box');
+            const notifMsg = document.getElementById('notification-message');
+            notifMsg.innerText = messaggio;
+            if (tipo === 'successo') notifBox.className = "p-4 rounded-xl flex justify-between text-white font-bold bg-green-600";
+            else if (tipo === 'errore') notifBox.className = "p-4 rounded-xl flex justify-between text-white font-bold bg-red-600";
+            else notifBox.className = "p-4 rounded-xl flex justify-between text-white font-bold bg-blue-600";
+            notifCont.classList.remove('hidden');
+            setTimeout(() => chiudiNotifica(), 3500);
+        }
+
+        function chiudiNotifica() { document.getElementById('custom-notification').classList.add('hidden'); }
+
+        async function initApp() {
+            aggiornaStatoConnessione();
+            window.addEventListener('online', aggiornaStatoConnessione);
+            window.addEventListener('offline', aggiornaStatoConnessione);
+            try {
+                const countProd = await db.prodotti.count();
+                if (countProd === 0) {
+                    await db.prodotti.bulkAdd([{ nome: "BRONZETTO 100GR" }, { nome: "PASCOLI ITALIANI 100GR" }, { nome: "BUONA SPESA 100GR" }]);
+                }
+                await caricaProdottiInterfaccia();
+                if (!GOOGLE_SCRIPT_URL.includes("INSERISCI_QUI")) await scaricaDatiDaCloud();
+                else { document.getElementById('sync-text').innerText = "Configura URL"; await renderGiacenze(); }
+            } catch (error) { console.error("Errore:", error); }
+        }
+
+        function aggiornaStatoConnessione() {
+            const status = document.getElementById('connection-status');
+            if (navigator.onLine) { status.innerText = "Connesso (" + DEVICE_ID + ")"; status.className = "text-xs text-green-300"; }
+            else { status.innerText = "Offline"; status.className = "text-xs text-red-300"; }
+        }
+
+        function estraiDataPura(stringaData) {
+            if (!stringaData) return "";
+            if (stringaData.includes("T")) return stringaData.split("T")[0];
+            let d = new Date(stringaData);
+            if (!isNaN(d.getTime())) return d.toISOString().split('T')[0];
+            return stringaData;
+        }
+
         async function inviaLog(tipoAzione, dettaglio) {
             try {
                 await fetch(GOOGLE_SCRIPT_URL, {
                     method: "POST",
-                    body: JSON.stringify({ action: "log", deviceId: DEVICE_ID, tipoAzione, dettaglio })
+                    headers: { "Content-Type": "text/plain;charset=utf-8" },
+                    body: JSON.stringify({ action: "log", deviceId: DEVICE_ID, tipoAzione: tipoAzione, dettaglio: dettaglio })
                 });
-            } catch (e) { console.error(e); }
+            } catch (e) { console.error("Errore log:", e); }
         }
 
-        async function caricaProdottiInterfaccia() {
-            const prodotti = await db.prodotti.toArray();
-            const select = document.getElementById('mov-prodotto');
-            const listaSetup = document.getElementById('setup-lista-prodotti');
-            select.innerHTML = '<option value="">Seleziona prodotto...</option>';
-            listaSetup.innerHTML = '';
-            prodotti.sort((a,b) => a.nome.localeCompare(b.nome)).forEach(p => {
-                select.innerHTML += `<option value="${p.id}">${p.nome}</option>`;
-                listaSetup.innerHTML += `<li>${p.nome} <button onclick="eliminaProdotto(${p.id})">Elimina</button></li>`;
+        async function scaricaDatiDaCloud() {
+            if (!navigator.onLine) return;
+            try {
+                const response = await fetch(GOOGLE_SCRIPT_URL);
+                const cloudRes = await response.json();
+                if (cloudRes.prodotti) {
+                    await db.prodotti.clear();
+                    await db.prodotti.bulkAdd(cloudRes.prodotti);
+                }
+                await db.giacenze.clear();
+                if (cloudRes.giacenze) await db.giacenze.bulkAdd(cloudRes.giacenze);
+                await caricaProdottiInterfaccia();
+                document.getElementById('sync-text').innerText = "Sincronizzato";
+            } catch (e) { document.getElementById('sync-text').innerText = "Errore Sync"; }
+        }
+
+        async function inviaDatiACloud() {
+            if (!navigator.onLine) return;
+            const locales = await db.giacenze.toArray();
+            await fetch(GOOGLE_SCRIPT_URL, {
+                method: "POST",
+                headers: { "Content-Type": "text/plain;charset=utf-8" },
+                body: JSON.stringify(locales)
             });
         }
 
-        async function aggiungiProdotto() {
-            const nome = document.getElementById('setup-nome-prodotto').value.trim().toUpperCase();
-            if(!nome) return;
-            await db.prodotti.add({ nome });
-            await caricaProdottiInterfaccia();
-        }
-
-        // --- FUNZIONI LOGICA ---
-        async function initApp() {
-            try {
-                if (await db.prodotti.count() === 0) await db.prodotti.bulkAdd([{ nome: "BRONZETTO 100GR" }, { nome: "PASCOLI ITALIANI 100GR" }]);
-                await caricaProdottiInterfaccia();
-                // ... (scaricaDati, ecc.)
-            } catch (e) { console.error(e); }
-        }
-
         async function registraCarico() {
-            // ... logica carico ...
-            await inviaLog("MOVIMENTO", "Carico effettuato");
+            const idProdotto = parseInt(document.getElementById('mov-prodotto').value);
+            const quantita = parseInt(document.getElementById('mov-quantita').value);
+            const lotto = document.getElementById('mov-lotto').value.trim().toUpperCase();
+            const scadenzaRaw = document.getElementById('mov-scadenza').value;
+
+            if (isNaN(idProdotto) || isNaN(quantita) || !lotto || !scadenzaRaw) return mostraNotifica("Campi mancanti!", "errore");
+            const scadenza = estraiDataPura(scadenzaRaw);
+            const p = await db.prodotti.get(idProdotto);
+            const nome = p ? p.nome : "Articolo";
+
+            const rec = await db.giacenze.where({ idProdotto, lotto, scadenza }).first();
+            if (rec) await db.giacenze.update(rec.id, { quantita: rec.quantita + quantita });
+            else await db.giacenze.add({ idProdotto, prodottoNome: nome, lotto, scadenza, quantita });
+
+            await inviaLog("MOVIMENTO", `Carico: ${quantita} ${nome} (Lotto: ${lotto})`);
+            mostraNotifica("Caricato!");
+            await inviaDatiACloud();
+            switchTab('giacenza');
         }
 
         async function confermaPrelievoModale() {
-            // ... logica prelievo ...
-            await inviaLog("MOVIMENTO", "Prelievo effettuato");
+            if (!lottoScaricandoSelezionato) return;
+            const qtaPrelevare = parseInt(document.getElementById('modal-quantita-prelievo').value);
+            const record = await db.giacenze.get(lottoScaricandoSelezionato.id);
+            if (!record || qtaPrelevare > record.quantita) return mostraNotifica("Quantità non valida", "errore");
+
+            if (record.quantita === qtaPrelevare) await db.giacenze.delete(record.id);
+            else await db.giacenze.update(record.id, { quantita: record.quantita - qtaPrelevare });
+
+            // LOG CORRETTO:
+            await inviaLog("MOVIMENTO", `Prelievo: ${qtaPrelevare} ${record.prodottoNome} (Lotto: ${record.lotto})`);
+            
+            chiudiModalePrelievo();
+            await inviaDatiACloud();
+            switchTab('giacenza');
         }
+
+        // ... [Mantieni qui le restanti funzioni: renderGiacenze, renderInventario, salvaInventarioGenerale, etc.] ...
+        // (Assicurati di incollare le funzioni che seguono qui sotto senza modificarle)
 
         window.onload = initApp;
     </script>
