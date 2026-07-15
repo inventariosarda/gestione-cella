@@ -231,6 +231,24 @@
                 }
                 await caricaProdottiInterfaccia();
 
+                async function inviaLog(tipoAzione, dettaglio) {
+    if (GOOGLE_SCRIPT_URL.includes("INSERISCI_QUI")) return;
+    try {
+        await fetch(GOOGLE_SCRIPT_URL, {
+            method: "POST",
+            headers: { "Content-Type": "text/plain;charset=utf-8" },
+            body: JSON.stringify({
+                action: "log",
+                deviceId: DEVICE_ID, // Usa l'ID che il dispositivo ha già generato
+                tipoAzione: tipoAzione,
+                dettaglio: dettaglio
+            })
+        });
+    } catch (e) {
+        console.error("Errore invio log:", e);
+    }
+}
+
                 // 2. Allineamento Giacenze
                 await db.giacenze.clear();
                 if (cloudRes.giacenze && Array.isArray(cloudRes.giacenze) && cloudRes.giacenze.length > 0) {
@@ -528,6 +546,8 @@
             document.getElementById('mov-quantita').value = "1";
             document.getElementById('mov-lotto').value = "";
             document.getElementById('mov-scadenza').value = "";
+
+            await inviaLog("MOVIMENTO", `Scarico: ${qtaPrelevare} ${lottoScaricandoSelezionato.prodottoNome} (Lotto: ${lottoScaricandoSelezionato.lotto})`)
             
             await inviaDatiACloud();
             switchTab('giacenza');
@@ -562,6 +582,8 @@
 
             mostraNotifica(`Prelevate ${qtaPrelevare} pedane del Lotto ${recordGiacenza.lotto}`);
             chiudiModalePrelievo();
+
+            await inviaLog("MOVIMENTO", `Scarico: ${qtaPrelevare} ${lottoScaricandoSelezionato.prodottoNome} (Lotto: ${lottoScaricandoSelezionato.lotto})`);
             
             await inviaDatiACloud();
             switchTab('giacenza');
@@ -683,6 +705,7 @@ async function renderGiacenze() {
                 }
             }
             mostraNotifica("Inventario salvato!");
+            await inviaLog("INVENTARIO", "Effettuato inventario generale");
             await inviaDatiACloud();
             await rilasciaBloccoInventario();
             switchTab('giacenza');
