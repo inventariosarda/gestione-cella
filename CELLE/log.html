@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Registro Eventi</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 min-h-screen">
+
+    <div id="schermata-password" class="fixed inset-0 bg-blue-900 flex items-center justify-center p-4 z-50">
+        <div class="bg-white rounded-2xl p-8 w-full max-w-sm shadow-2xl space-y-4">
+            <h1 class="text-xl font-bold text-blue-900 text-center">🔒 Registro Eventi</h1>
+            <p class="text-sm text-gray-500 text-center">Inserisci la password per accedere</p>
+            <input type="password" id="input-password" placeholder="Password" class="w-full p-3 border rounded-lg text-lg text-center" onkeydown="if(event.key==='Enter') verificaPassword()">
+            <button onclick="verificaPassword()" class="w-full bg-blue-800 text-white py-3 rounded-xl font-bold">Accedi</button>
+            <p id="errore-password" class="text-red-600 text-sm text-center hidden">Password errata</p>
+        </div>
+    </div>
+
+    <div id="contenuto-admin" class="hidden p-4">
+        <div class="max-w-5xl mx-auto space-y-6">
+            <div class="flex justify-between items-center">
+                <h1 class="text-2xl font-bold text-blue-900">📋 Registro Eventi</h1>
+                <div class="flex gap-2">
+                    <button onclick="caricaDati()" class="bg-blue-800 text-white px-4 py-2 rounded-lg text-sm font-bold">🔄 Aggiorna</button>
+                    <button onclick="esci()" class="bg-gray-300 text-gray-700 px-4 py-2 rounded-lg text-sm font-bold">Esci</button>
+                </div>
+            </div>
+
+            <div class="bg-white p-6 rounded-xl shadow">
+                <h2 class="text-lg font-bold mb-4 text-gray-800">Dispositivi Registrati</h2>
+                <div id="lista-dispositivi" class="flex flex-wrap gap-2"></div>
+            </div>
+
+            <div class="bg-white p-6 rounded-xl shadow">
+                <h2 class="text-lg font-bold mb-4 text-gray-800">Log Attività</h2>
+                <div id="loading" class="text-center text-gray-500 py-8">Caricamento...</div>
+                <div id="tabella-container" class="hidden overflow-x-auto">
+                    <table class="w-full text-sm text-left">
+                        <thead class="bg-gray-50 uppercase text-xs">
+                            <tr>
+                                <th class="p-2">Data/Ora</th>
+                                <th class="p-2">Dispositivo</th>
+                                <th class="p-2">Azione</th>
+                                <th class="p-2">Dettaglio</th>
+                                <th class="p-2 w-20">Modifica</th>
+                            </tr>
+                        </thead>
+                        <tbody id="log-body"></tbody>
+                    </table>
+                </div>
+                <p id="log-vuoto" class="hidden text-center text-gray-500 py-8">Nessun evento registrato.</p>
+            </div>
+        </div>
+    </div>
+
+    <div id="modal-modifica" class="fixed inset-0 bg-black bg-opacity-50 z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl p-6 w-full max-w-md shadow-2xl space-y-4">
+            <h3 class="text-lg font-bold text-gray-900 border-b pb-2">✏️ Modifica Evento</h3>
+            <input type="hidden" id="edit-id">
+            <div>
+                <label class="block text-sm font-semibold mb-1">Azione:</label>
+                <input type="text" id="edit-azione" class="w-full p-3 border rounded-lg">
+            </div>
+            <div>
+                <label class="block text-sm font-semibold mb-1">Dettaglio:</label>
+                <textarea id="edit-dettaglio" rows="3" class="w-full p-3 border rounded-lg"></textarea>
+            </div>
+            <div class="grid grid-cols-2 gap-3 pt-2">
+                <button onclick="chiudiModale()" class="bg-gray-200 text-gray-700 py-3 rounded-xl font-bold">Annulla</button>
+                <button onclick="salvaModifica()" class="bg-blue-800 text-white py-3 rounded-xl font-bold">Salva</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwLoo9i7DxIFwcuiKSP1dv1DEBdMd9YPN59o_9qqGo7tAsutI6ua3UjEQF6_-ItSwSM/exec";
+        const PASSWORD_ACCESSO = "030184";
+        const SESSION_KEY = "log_accesso_autorizzato";
+
+        function verificaPassword() {
+            const pwd = document.getElementById('input-password').value;
+            if (pwd === PASSWORD_ACCESSO) {
+                sessionStorage.setItem(SESSION_KEY, "true");
+                mostraContenuto();
+            } else {
+                document.getElementById('errore-password').classList.remove('hidden');
+            }
+        }
+
+        function mostraContenuto() {
+            document.getElementById('schermata-password').classList.add('hidden');
+            document.getElementById('contenuto-admin').classList.remove('hidden');
+            caricaDati();
+        }
+
+        function esci() {
+            sessionStorage.removeItem(SESSION_KEY);
+            location.reload();
+        }
+
+        function formattaData(val) {
+            if (!val) return "-";
+            const d = new Date(val);
+            return isNaN(d.getTime()) ? val : d.toLocaleString('it-IT');
+        }
+
+        function badgeAzione(azione) {
+            const colori = {
+                'ENTRATA': 'bg-green-100 text-green-800',
+                'USCITA': 'bg-red-100 text-red-800',
+                'INVENTARIO': 'bg-orange-100 text-orange-800',
+                'AGGIUNTA_PRODOTTO': 'bg-blue-100 text-blue-800',
+                'ELIMINA_PRODOTTO': 'bg-purple-100 text-purple-800',
+                'SINCRONIZZAZIONE': 'bg-gray-100 text-gray-800'
+            };
+            const cls = colori[azione] || 'bg-gray-100 text-gray-700';
+            return `<span class="px-2 py-0.5 rounded-full text-xs font-bold ${cls}">${azione}</span>`;
+        }
+
+        async function caricaDati() {
+            document.getElementById('loading').classList.remove('hidden');
+            document.getElementById('tabella-container').classList.add('hidden');
+            document.getElementById('log-vuoto').classList.add('hidden');
+
+            try {
+                const res = await fetch(GOOGLE_SCRIPT_URL + "?page=log");
+                const data = await res.json();
+
+                const dispContainer = document.getElementById('lista-dispositivi');
+                dispContainer.innerHTML = "";
+                const dispositivi = data.dispositivi || [];
+                const righeDisp = dispositivi.length > 1 ? dispositivi.slice(1) : dispositivi;
+                if (righeDisp.length === 0) {
+                    dispContainer.innerHTML = '<span class="text-gray-400 text-sm">Nessun dispositivo registrato</span>';
+                } else {
+                    righeDisp.forEach(d => {
+                        const id = Array.isArray(d) ? d[0] : d.id;
+                        const ultimo = Array.isArray(d) ? (d[1] || '') : (d.ultimoAccesso || '');
+                        dispContainer.innerHTML += `<span class="bg-blue-50 text-blue-800 px-3 py-1 rounded-full text-sm font-bold">${id}${ultimo ? ' <span class="font-normal text-xs">(' + formattaData(ultimo) + ')</span>' : ''}</span>`;
+                    });
+                }
+
+                const logBody = document.getElementById('log-body');
+                logBody.innerHTML = "";
+                const log = data.log || [];
+                const righeLog = log.length > 1 ? log.slice(1) : log;
+
+                if (righeLog.length === 0) {
+                    document.getElementById('log-vuoto').classList.remove('hidden');
+                } else {
+                    righeLog.reverse().forEach(l => {
+                        const id = Array.isArray(l) ? l[0] : l.id;
+                        const dataOra = Array.isArray(l) ? l[1] : l.timestamp;
+                        const device = Array.isArray(l) ? l[2] : l.deviceId;
+                        const azione = Array.isArray(l) ? l[3] : l.azione;
+                        const dettaglio = Array.isArray(l) ? (l[4] || '') : (l.dettaglio || '');
+
+                        const tr = document.createElement('tr');
+                        tr.className = 'border-t hover:bg-gray-50';
+                        tr.innerHTML = `
+                                <td class="p-2 whitespace-nowrap">${formattaData(dataOra)}</td>
+                                <td class="p-2 font-bold text-blue-800">${device}</td>
+                                <td class="p-2">${badgeAzione(azione)}</td>
+                                <td class="p-2 text-gray-600">${dettaglio || '-'}</td>
+                                <td class="p-2">
+                                    <button class="btn-modifica text-blue-600 font-bold text-xs hover:underline">✏️</button>
+                                </td>`;
+                        tr.querySelector('.btn-modifica').addEventListener('click', () => apriModale(id, azione, dettaglio));
+                        logBody.appendChild(tr);
+                    });
+                    document.getElementById('tabella-container').classList.remove('hidden');
+                }
+            } catch (e) {
+                console.error(e);
+                document.getElementById('log-vuoto').innerText = "Errore nel caricamento. Verifica la connessione e il backend Google Apps Script.";
+                document.getElementById('log-vuoto').classList.remove('hidden');
+            }
+            document.getElementById('loading').classList.add('hidden');
+        }
+
+        function apriModale(id, azione, dettaglio) {
+            document.getElementById('edit-id').value = id;
+            document.getElementById('edit-azione').value = azione;
+            document.getElementById('edit-dettaglio').value = dettaglio;
+            document.getElementById('modal-modifica').classList.remove('hidden');
+        }
+
+        function chiudiModale() {
+            document.getElementById('modal-modifica').classList.add('hidden');
+        }
+
+        async function salvaModifica() {
+            const id = document.getElementById('edit-id').value;
+            const azione = document.getElementById('edit-azione').value.trim();
+            const dettaglio = document.getElementById('edit-dettaglio').value.trim();
+            if (!azione) return alert("L'azione non può essere vuota.");
+
+            try {
+                const res = await fetch(GOOGLE_SCRIPT_URL, {
+                    method: "POST",
+                    headers: { "Content-Type": "text/plain;charset=utf-8" },
+                    body: JSON.stringify({
+                        action: "updateLog",
+                        password: PASSWORD_ACCESSO,
+                        id: parseInt(id),
+                        azione: azione,
+                        dettaglio: dettaglio
+                    })
+                });
+                const esito = await res.json();
+                if (esito.success) {
+                    chiudiModale();
+                    caricaDati();
+                } else {
+                    alert(esito.message || "Errore durante il salvataggio.");
+                }
+            } catch (e) {
+                console.error(e);
+                alert("Errore di rete durante il salvataggio.");
+            }
+        }
+
+        if (sessionStorage.getItem(SESSION_KEY) === "true") {
+            mostraContenuto();
+        }
+    </script>
+</body>
+</html>
