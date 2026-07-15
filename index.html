@@ -169,9 +169,9 @@
                 const countProd = await db.prodotti.count();
                 if (countProd === 0) {
                     await db.prodotti.bulkAdd([
-                        { nome: "BRONZETTO 100gr" },
-                        { nome: "PASCOLI ITALIANI 100gr" },
-                        { nome: "BUONA SPESA 100gr" }
+                        { nome: "BRONZETTO 100GR" },
+                        { nome: "PASCOLI ITALIANI 100GR" },
+                        { nome: "BUONA SPESA 100GR" }
                     ]);
                 }
                 await caricaProdotti();
@@ -217,10 +217,31 @@
                 
                 if (Array.isArray(cloudData)) {
                     await db.giacenze.clear();
+                    
                     if (cloudData.length > 0) {
+                        // LOGICA DI AUTO-APPRENDIMENTO DEI NUOVI ARTICOLI
+                        for (const item of cloudData) {
+                            const targetId = parseInt(item.idProdotto);
+                            const targetNome = item.prodottoNome ? item.prodottoNome.trim().toUpperCase() : "";
+                            
+                            if (!isNaN(targetId) && targetNome) {
+                                // Controlla se il prodotto esiste già per ID o per Nome nel catalogo locale
+                                const esistePerId = await db.prodotti.get(targetId);
+                                const esistePerNome = await db.prodotti.where('nome').equals(targetNome).first();
+                                
+                                if (!esistePerId && !esistePerNome) {
+                                    // Se non esiste, lo inserisce mantenendo l'ID coerente del foglio cloud
+                                    await db.prodotti.add({ id: targetId, nome: targetNome });
+                                }
+                            }
+                        }
+                        
+                        // Ricarica la lista prodotti aggiornata in memoria
+                        await caricaProdotti();
+
                         const formattedData = cloudData.map(item => ({
                             idProdotto: parseInt(item.idProdotto),
-                            prodottoNome: item.prodottoNome,
+                            prodottoNome: item.prodottoNome ? item.prodottoNome.trim().toUpperCase() : "Articolo Sconosciuto",
                             lotto: item.lotto,
                             scadenza: estraiDataPura(item.scadenza),
                             quantita: parseInt(item.quantita)
@@ -281,14 +302,12 @@
                     quantita: l.quantita
                 }));
                 
-                // Inviamo lo stato corrente senza blocchi cors
                 await fetch(GOOGLE_SCRIPT_URL, {
                     method: "POST",
                     headers: { "Content-Type": "text/plain;charset=utf-8" },
                     body: JSON.stringify(datiProtetti)
                 });
                 
-                // Scarichiamo immediatamente i dati aggiornati del foglio condiviso
                 await scaricaDatiDaCloud();
                 await renderGiacenze();
                 mostraNotifica("Giacenze Cloud Allineate con tutti i dispositivi!");
@@ -305,7 +324,6 @@
             document.querySelectorAll('nav button').forEach(b => b.classList.remove('active-tab'));
             document.getElementById(`nav-${tabId}`).classList.add('active-tab');
             
-            // Tentiamo una sincronizzazione automatica silenziosa quando ci si sposta di tab
             if (navigator.onLine && !GOOGLE_SCRIPT_URL.includes("INSERISCI_QUI")) {
                 await scaricaDatiDaCloud();
             }
@@ -313,6 +331,7 @@
             if (tabId === 'giacenza') await renderGiacenze();
             if (tabId === 'inventario') await renderInventario();
             if (tabId === 'movimentazione') await aggiornaVistaMovimento();
+            if (tabId === 'setup') await caricaProdotti();
         }
 
         function setTipoMovimento(tipo) {
@@ -339,7 +358,9 @@
         }
 
         async function aggiornaVistaMovimento() {
-            const idProdotto = parseInt(document.getElementById('mov-prodotto').value);
+            const selectMov = document.getElementById('mov-prodotto');
+            if (!selectMov.value) return;
+            const idProdotto = parseInt(selectMov.value);
             const containerCarico = document.getElementById('container-carico-manuale');
             const containerScarico = document.getElementById('container-scarico-lotti');
 
@@ -373,11 +394,13 @@
 
         async function caricaProdotti() {
             const list = await db.prodotti.toArray();
+            // Ordiniamo alfabeticamente per comodità dell'operatore
+            list.sort((a, b) => a.nome.localeCompare(b.nome));
+            
             document.getElementById('mov-prodotto').innerHTML = list.map(p => `<option value="${p.id}">${p.nome}</option>`).join('');
             document.getElementById('setup-lista-prodotti').innerHTML = list.map(p => `
                 <li class="flex justify-between items-center py-3"><span class="font-medium">${p.nome}</span><button onclick="eliminaProdotto(${p.id})" class="text-red-500 text-sm">Elimina</button></li>
             `).join('');
-            await aggiornaVistaMovimento();
         }
 
         async function aggiungiProdotto() {
@@ -385,9 +408,12 @@
             const nome = nomeInput.value.trim().toUpperCase();
             if (!nome) return mostraNotifica("Nome non valido!", "errore");
             try {
-                await db.prodotti.add({ nome: nome });
+                // Generiamo un ID timestamp numerico per evitare conflitti tra i vari telefoni offline
+                const nuovoId = Date.now();
+                await db.prodotti.add({ id: nuovoId, nome: nome });
                 nomeInput.value = "";
                 await caricaProdotti();
+                await aggiornaVistaMovimento();
                 mostraNotifica("Articolo salvato!");
             } catch (e) { mostraNotifica("Articolo già esistente.", "errore"); }
         }
@@ -413,8 +439,8 @@
             }
 
             const scadenza = estraiDataPura(scadenzaRaw);
-            const prodottoObj = await db.prodotti.get(idProdotto);
-            const nomeProdottoSicuro = prodottoObj ? prodottoObj.nome : "Articolo Sconosciuto";
+            const productoObj = await db.prodotti.get(idProdotto);
+            const nomeProdottoSicuro = productoObj ? productoObj.nome : "Articolo Sconosciuto";
 
             const recordEsistente = await db.giacenze.where({ idProdotto: idProdotto, lotto: lotto, scadenza: scadenza }).first();
 
@@ -508,6 +534,7 @@
 
         async function renderInventario() {
             const prodotti = await db.prodotti.toArray();
+            prodotti.sort((a, b) => a.nome.localeCompare(b.nome));
             const container = document.getElementById('inventario-container');
             let html = '';
             for (const p of prodotti) {
