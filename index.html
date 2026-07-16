@@ -402,7 +402,9 @@ function formattaData(dataStringa) {
             }
 
             const html = prodotti.map(p => {
-                const lotti = giacenze.filter(g => g.idProdotto === p.id && g.quantita > 0);
+                const lotti = giacenze
+                .filter(g => g.idProdotto === p.id && g.quantita > 0)
+                .sort((a, b) => new Date(a.scadenza) - new Date(b.scadenza));
                 const totale = lotti.reduce((s, g) => s + g.quantita, 0);
                 const badgeClass = totale > 0 ? 'bg-green-600 text-white' : 'bg-gray-400 text-white';
                 return `
