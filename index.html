@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Gestione Pedane Grattugiato</title>
+    <title>Gestione Pedane</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         body { -webkit-tap-highlight-color: transparent; user-select: none; }
@@ -12,7 +12,7 @@
         .tab-content.active { display: block; }
     </style>
 </head>
-<body class="bg-gray-100 font-sans text-gray-800 flex flex-col min-h-screen pb-20">
+<body class="bg-gray-100 font-sans text-gray-800 flex flex-col min-h-screen pb-24">
 
     <header class="bg-blue-800 text-white p-4 shadow-md sticky top-0 z-50 flex justify-between items-center">
         <div>
@@ -32,22 +32,28 @@
         <section id="section-movimentazione" class="tab-content active">
             <h2 class="text-lg font-bold mb-4 text-blue-900 border-b pb-2">🔄 Movimentazione</h2>
             <div class="bg-white p-4 rounded-xl shadow space-y-4">
-                <select id="mov-prodotto" class="w-full p-3 border rounded-lg bg-white"></select>
+                <select id="mov-prodotto" onchange="aggiornaVistaOUT()" class="w-full p-3 border rounded-lg bg-white"></select>
                 <div class="grid grid-cols-2 gap-2">
                     <button id="btn-tipo-entrata" onclick="setTipoMovimento('ENTRATA')" class="py-3 rounded-lg font-bold border-2 border-green-600 bg-green-50 text-green-700">📥 IN</button>
                     <button id="btn-tipo-uscita" onclick="setTipoMovimento('USCITA')" class="py-3 rounded-lg font-bold border-2 border-gray-300 text-gray-500">📤 OUT</button>
                 </div>
+                
                 <div id="container-carico-manuale" class="space-y-3">
                     <input type="number" id="mov-quantita" value="1" class="w-full p-3 border rounded-lg text-center font-bold">
                     <input type="text" id="mov-lotto" placeholder="Lotto" class="w-full p-3 border rounded-lg uppercase">
                     <input type="date" id="mov-scadenza" class="w-full p-3 border rounded-lg">
                     <button onclick="registraMovimento()" class="w-full bg-green-600 text-white py-4 rounded-xl font-bold">REGISTRA MOVIMENTO</button>
                 </div>
+
+                <div id="container-scarico-lotti" class="space-y-3 hidden">
+                    <p class="text-sm font-semibold text-gray-600 text-center">Seleziona lotto da scaricare:</p>
+                    <div id="lista-lotti-prelievo" class="space-y-2"></div>
+                </div>
             </div>
         </section>
 
         <section id="section-giacenza" class="tab-content">
-            <h2 class="text-lg font-bold mb-4">📊 Giacenza</h2>
+            <h2 class="text-lg font-bold mb-4 text-blue-900">📊 Giacenza Attuale</h2>
             <div id="giacenza-lista" class="space-y-3"></div>
         </section>
 
@@ -63,16 +69,16 @@
         </section>
     </main>
 
-    <nav class="fixed bottom-0 left-0 right-0 bg-white border-t flex justify-around py-2 shadow-lg z-50">
-        <button onclick="switchTab('movimentazione')" id="nav-movimentazione" class="active-tab py-1 w-full text-xs font-bold">🔄 Mov</button>
-        <button onclick="switchTab('giacenza')" id="nav-giacenza" class="py-1 w-full text-xs font-bold">📊 Giac</button>
-        <button onclick="switchTab('inventario')" id="nav-inventario" class="py-1 w-full text-xs font-bold">📝 Inv</button>
-        <button onclick="switchTab('setup')" id="nav-setup" class="py-1 w-full text-xs font-bold">⚙️ Setup</button>
+    <nav class="fixed bottom-0 left-0 right-0 bg-white border-t flex justify-around py-3 shadow-lg z-50">
+        <button onclick="switchTab('movimentazione')" id="nav-movimentazione" class="flex flex-col items-center active-tab py-1 w-full text-sm font-bold"><span>🔄</span>Mov</button>
+        <button onclick="switchTab('giacenza')" id="nav-giacenza" class="flex flex-col items-center py-1 w-full text-sm font-bold"><span>📊</span>Giac</button>
+        <button onclick="switchTab('inventario')" id="nav-inventario" class="flex flex-col items-center py-1 w-full text-sm font-bold"><span>📝</span>Inv</button>
+        <button onclick="switchTab('setup')" id="nav-setup" class="flex flex-col items-center py-1 w-full text-sm font-bold"><span>⚙️</span>Setup</button>
     </nav>
 
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-        import { getFirestore, collection, addDoc, onSnapshot, query, deleteDoc, doc, getDocs, writeBatch, setDoc, getDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+        import { getFirestore, collection, addDoc, onSnapshot, query, deleteDoc, doc, writeBatch, setDoc, getDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
         const firebaseConfig = {
             apiKey: "AIzaSyB0daUTnfyhdyWPpkmFoPcyAguyZq63NE0",
@@ -89,25 +95,22 @@
         window.db = db;
         const DEVICE_ID = 'D-' + Math.floor(Math.random() * 1000);
 
-        // Stato Globale
         let tipoMovimento = 'ENTRATA';
         let prodotti = [];
         let giacenze = [];
 
-        // Inizializzazione
         window.onload = () => {
-            // Ascolta prodotti
             onSnapshot(collection(db, "prodotti"), (snap) => {
                 prodotti = snap.docs.map(d => ({...d.data(), id: d.id}));
-                renderSetup();
                 updateSelectProdotti();
+                renderSetup();
                 renderGiacenze();
             });
 
-            // Ascolta giacenze
             onSnapshot(collection(db, "giacenze"), (snap) => {
                 giacenze = snap.docs.map(d => ({...d.data(), id: d.id}));
                 renderGiacenze();
+                aggiornaVistaOUT();
             });
         };
 
@@ -119,23 +122,21 @@
             setTimeout(() => document.getElementById('custom-notification').classList.add('hidden'), 3000);
         }
 
-        async function switchTab(tabId) {
-            // Gestione Lock Inventario
-            if (tabId === 'inventario') {
-                const lockRef = doc(db, "config", "lock");
-                const lockSnap = await getDoc(lockRef);
-                if (lockSnap.exists() && lockSnap.data().deviceId !== DEVICE_ID) return mostraNotifica("Inventario occupato!", "errore");
-                await setDoc(lockRef, { deviceId: DEVICE_ID });
-            } else {
-                const lockRef = doc(db, "config", "lock");
-                const lockSnap = await getDoc(lockRef);
-                if (lockSnap.exists() && lockSnap.data().deviceId === DEVICE_ID) await deleteDoc(lockRef);
-            }
-
+        function switchTab(tabId) {
             document.querySelectorAll('.tab-content').forEach(s => s.classList.remove('active'));
             document.getElementById(`section-${tabId}`).classList.add('active');
-            if (tabId === 'inventario') renderInventario();
-            if (tabId === 'setup') renderSetup();
+            document.querySelectorAll('nav button').forEach(b => b.classList.remove('active-tab'));
+            document.getElementById(`nav-${tabId}`).classList.add('active-tab');
+            if(tabId === 'inventario') renderInventario();
+        }
+
+        window.setTipoMovimento = (t) => {
+            tipoMovimento = t;
+            document.getElementById('btn-tipo-entrata').className = (t === 'ENTRATA') ? "py-3 rounded-lg font-bold border-2 border-green-600 bg-green-50 text-green-700" : "py-3 rounded-lg font-bold border-2 border-gray-300 text-gray-500";
+            document.getElementById('btn-tipo-uscita').className = (t === 'USCITA') ? "py-3 rounded-lg font-bold border-2 border-red-600 bg-red-50 text-red-700" : "py-3 rounded-lg font-bold border-2 border-gray-300 text-gray-500";
+            document.getElementById('container-carico-manuale').classList.toggle('hidden', t === 'USCITA');
+            document.getElementById('container-scarico-lotti').classList.toggle('hidden', t === 'ENTRATA');
+            aggiornaVistaOUT();
         }
 
         function updateSelectProdotti() {
@@ -143,18 +144,23 @@
             sel.innerHTML = prodotti.map(p => `<option value="${p.id}">${p.nome}</option>`).join('');
         }
 
-        async function aggiungiProdotto() {
-            const nome = document.getElementById('setup-nome-prodotto').value.trim().toUpperCase();
-            if(!nome) return;
-            await addDoc(collection(db, "prodotti"), { nome });
-            document.getElementById('setup-nome-prodotto').value = '';
+        function aggiornaVistaOUT() {
+            if(tipoMovimento !== 'USCITA') return;
+            const pid = document.getElementById('mov-prodotto').value;
+            const cont = document.getElementById('lista-lotti-prelievo');
+            const lotti = giacenze.filter(g => g.idProdotto === pid && g.quantita > 0);
+            cont.innerHTML = lotti.map(g => `
+                <div class="bg-gray-50 p-3 rounded-lg flex justify-between border">
+                    <div><b>${g.lotto}</b><br><small>${g.scadenza}</small></div>
+                    <button onclick="preleva('${g.id}', ${g.quantita})" class="bg-red-600 text-white px-3 py-1 rounded">OUT (-1)</button>
+                </div>
+            `).join('');
         }
 
-        async function eliminaProdotto(id) {
-            await deleteDoc(doc(db, "prodotti", id));
-            // Elimina anche le giacenze legate
-            const gs = giacenze.filter(g => g.idProdotto === id);
-            for(let g of gs) await deleteDoc(doc(db, "giacenze", g.id));
+        window.preleva = async (id, qta) => {
+            if(qta <= 1) await deleteDoc(doc(db, "giacenze", id));
+            else await setDoc(doc(db, "giacenze", id), {...giacenze.find(x=>x.id===id), quantita: qta - 1});
+            mostraNotifica("Prelevata 1 pedana");
         }
 
         async function registraMovimento() {
@@ -166,88 +172,43 @@
             
             if(!lotto || !scad || !qta) return mostraNotifica("Compila tutto", "errore");
             
-            await addDoc(collection(db, "giacenze"), { idProdotto: pid, nome: p.nome, lotto, scadenza: scad, quantita: (tipoMovimento === 'USCITA' ? -qta : qta) });
+            await addDoc(collection(db, "giacenze"), { idProdotto: pid, nome: p.nome, lotto, scadenza: scad, quantita: qta });
             mostraNotifica("Registrato!");
+            // RESET CAMPI
+            document.getElementById('mov-quantita').value = "1";
+            document.getElementById('mov-lotto').value = "";
+            document.getElementById('mov-scadenza').value = "";
         }
 
         function renderGiacenze() {
             const cont = document.getElementById('giacenza-lista');
             cont.innerHTML = prodotti.map(p => {
-                const gTot = giacenze.filter(g => g.idProdotto === p.id).reduce((acc, curr) => acc + curr.quantita, 0);
-                return `<div class="bg-white p-4 rounded-xl shadow"><b>${p.nome}</b>: ${gTot} pedane</div>`;
+                const lotti = giacenze.filter(g => g.idProdotto === p.id);
+                if(lotti.length === 0) return '';
+                return `
+                    <div class="bg-white p-4 rounded-xl shadow mb-3">
+                        <h3 class="font-bold text-blue-900 border-b mb-2">${p.nome}</h3>
+                        ${lotti.map(g => `
+                            <div class="flex justify-between py-1 text-sm">
+                                <span>Lotto: ${g.lotto} (Scad: ${g.scadenza})</span>
+                                <span class="font-bold">${g.quantita}</span>
+                            </div>
+                        `).join('')}
+                    </div>`;
             }).join('');
         }
 
-        function renderInventario() {
-            const cont = document.getElementById('inventario-container');
-            cont.innerHTML = prodotti.map(p => `
-                <div class="bg-white p-4 rounded-xl shadow" data-id="${p.id}">
-                    <h3 class="font-bold">${p.nome}</h3>
-                    <div id="lotti-${p.id}">
-                        ${giacenze.filter(g => g.idProdotto === p.id).map(g => `
-                            <div class="flex gap-2 pb-2 row-lotto">
-                                <input type="text" value="${g.lotto}" class="w-1/4 p-1 border rounded inv-lotto">
-                                <input type="date" value="${g.scadenza}" class="w-2/5 p-1 border rounded inv-scad">
-                                <input type="number" value="${g.quantita}" class="w-1/5 p-1 border rounded inv-qta">
-                                <button onclick="this.parentElement.remove()" class="text-red-500">✕</button>
-                            </div>`).join('')}
-                    </div>
-                    <button onclick="aggiungiRiga('${p.id}')" class="text-blue-600 text-sm font-bold mt-2">+ Riga</button>
-                </div>`).join('');
+        async function aggiungiProdotto() {
+            const nome = document.getElementById('setup-nome-prodotto').value.trim().toUpperCase();
+            if(!nome) return;
+            await addDoc(collection(db, "prodotti"), { nome });
+            document.getElementById('setup-nome-prodotto').value = '';
         }
 
-        window.aggiungiRiga = (id) => {
-            const d = document.createElement('div');
-            d.className = "flex gap-2 pb-2 row-lotto";
-            d.innerHTML = `<input type="text" placeholder="Lotto" class="w-1/4 p-1 border rounded inv-lotto"><input type="date" class="w-2/5 p-1 border rounded inv-scad"><input type="number" value="1" class="w-1/5 p-1 border rounded inv-qta"><button onclick="this.parentElement.remove()" class="text-red-500">✕</button>`;
-            document.getElementById(`lotti-${id}`).appendChild(d);
-        }
-
-        async function salvaInventarioGenerale() {
-            const batch = writeBatch(db);
-            const cards = document.querySelectorAll('#inventario-container > div');
-            
-            // Elimina vecchie
-            for(let g of giacenze) batch.delete(doc(db, "giacenze", g.id));
-            
-            // Aggiungi nuove
-            for(let c of cards) {
-                const pid = c.getAttribute('data-id');
-                const p = prodotti.find(x => x.id === pid);
-                for(let r of c.querySelectorAll('.row-lotto')) {
-                    const l = r.querySelector('.inv-lotto').value.trim().toUpperCase();
-                    const s = r.querySelector('.inv-scad').value;
-                    const q = parseInt(r.querySelector('.inv-qta').value);
-                    if(l && s && !isNaN(q)) {
-                        const ref = doc(collection(db, "giacenze"));
-                        batch.set(ref, { idProdotto: pid, nome: p.nome, lotto: l, scadenza: s, quantita: q });
-                    }
-                }
-            }
-            await batch.commit();
-            await deleteDoc(doc(db, "config", "lock"));
-            mostraNotifica("Inventario salvato!");
-            switchTab('giacenza');
-        }
-
-        function renderSetup() {
-            document.getElementById('setup-lista-prodotti').innerHTML = prodotti.map(p => `
-                <li class="py-2 flex justify-between"><span>${p.nome}</span>
-                <button onclick="eliminaProdotto('${p.id}')" class="text-red-500 font-bold">Elimina</button></li>`).join('');
-        }
-
-        window.setTipoMovimento = (t) => {
-            tipoMovimento = t;
-            document.getElementById('btn-tipo-entrata').className = (t === 'ENTRATA') ? "py-3 rounded-lg font-bold border-2 border-green-600 bg-green-50 text-green-700" : "py-3 rounded-lg font-bold border-2 border-gray-300 text-gray-500";
-            document.getElementById('btn-tipo-uscita').className = (t === 'USCITA') ? "py-3 rounded-lg font-bold border-2 border-red-600 bg-red-50 text-red-700" : "py-3 rounded-lg font-bold border-2 border-gray-300 text-gray-500";
-        }
-
-        // Export per il DOM
         window.aggiungiProdotto = aggiungiProdotto;
-        window.eliminaProdotto = eliminaProdotto;
-        window.registraMovimento = registraMovimento;
-        window.salvaInventarioGenerale = salvaInventarioGenerale;
         window.switchTab = switchTab;
+        window.registraMovimento = registraMovimento;
+        window.renderGiacenze = renderGiacenze;
     </script>
 </body>
 </html>
