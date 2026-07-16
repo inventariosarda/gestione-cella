@@ -1,0 +1,401 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Eventi - Gestione Pedane</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { -webkit-tap-highlight-color: transparent; user-select: none; }
+    </style>
+</head>
+<body class="bg-gray-100 font-sans text-gray-800 flex flex-col min-h-screen pb-4">
+
+    <header class="bg-blue-800 text-white p-4 shadow-md sticky top-0 z-50 flex justify-between items-center">
+        <div>
+            <h1 class="text-xl font-bold tracking-wide">📋 Eventi</h1>
+            <span class="text-xs opacity-80">Registro modifiche</span>
+        </div>
+        <a href="index.html" class="text-xs bg-white bg-opacity-20 px-3 py-2 rounded-lg font-bold">← App</a>
+    </header>
+
+    <!-- Modal messaggio -->
+    <div id="modal-messaggio" class="fixed inset-0 z-[70] hidden flex items-center justify-center p-4 bg-black bg-opacity-50">
+        <div class="bg-white rounded-xl shadow-2xl w-full max-w-sm p-5">
+            <p id="modal-messaggio-testo" class="text-sm text-gray-700 mb-4"></p>
+            <button onclick="chiudiModalMessaggio()" class="w-full py-3 rounded-lg font-bold bg-blue-600 text-white">OK</button>
+        </div>
+    </div>
+
+    <!-- Modal modifica evento -->
+    <div id="modal-modifica-evento" class="fixed inset-0 z-[60] hidden flex items-center justify-center p-4 bg-black bg-opacity-50">
+        <div class="bg-white rounded-xl shadow-2xl w-full max-w-sm p-5 max-h-[90vh] overflow-y-auto">
+            <h3 class="text-lg font-bold text-blue-900 mb-4">Modifica evento</h3>
+            <input type="hidden" id="modal-evento-id">
+            <div class="space-y-3">
+                <div>
+                    <label class="block text-xs font-semibold text-gray-600 mb-1">Tipo</label>
+                    <select id="modal-evento-tipo" class="w-full p-2 border rounded-lg text-sm">
+                        <option value="ENTRATA">ENTRATA</option>
+                        <option value="USCITA">USCITA</option>
+                        <option value="INVENTARIO">INVENTARIO</option>
+                        <option value="SETUP">SETUP</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-gray-600 mb-1">Prodotto</label>
+                    <select id="modal-evento-prodotto" class="w-full p-2 border rounded-lg text-sm"></select>
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-gray-600 mb-1">Lotto</label>
+                    <input type="text" id="modal-evento-lotto" class="w-full p-2 border rounded-lg text-sm uppercase" placeholder="Lotto">
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-gray-600 mb-1">Scadenza</label>
+                    <input type="date" id="modal-evento-scadenza" class="w-full p-2 border rounded-lg text-sm">
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-gray-600 mb-1">Pedane</label>
+                    <input type="number" id="modal-evento-quantita" min="0" class="w-full p-2 border rounded-lg text-sm font-bold text-center">
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-gray-600 mb-1">Nota</label>
+                    <input type="text" id="modal-evento-nota" class="w-full p-2 border rounded-lg text-sm" placeholder="Nota">
+                </div>
+                <div class="bg-gray-50 p-2 rounded-lg text-xs text-gray-500 space-y-1">
+                    <p>Data: <span id="modal-evento-timestamp" class="font-semibold"></span></p>
+                    <p>Dispositivo: <span id="modal-evento-device" class="font-semibold"></span></p>
+                </div>
+            </div>
+            <div class="grid grid-cols-2 gap-2 mt-4">
+                <button onclick="chiudiModalEvento()" class="py-3 rounded-lg font-bold border-2 border-gray-300 text-gray-600">Annulla</button>
+                <button onclick="salvaModificaEvento()" class="py-3 rounded-lg font-bold bg-blue-600 text-white">Salva</button>
+            </div>
+        </div>
+    </div>
+
+    <main class="flex-grow p-4 max-w-md mx-auto w-full">
+        <div id="eventi-lista" class="space-y-3"></div>
+    </main>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+        import { getFirestore, collection, onSnapshot, query, doc, updateDoc, deleteDoc, addDoc, orderBy } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyB0daUTnfyhdyWPpkmFoPcyAguyZq63NE0",
+            authDomain: "gestionepedane.firebaseapp.com",
+            projectId: "gestionepedane",
+            storageBucket: "gestionepedane.firebasestorage.app",
+            messagingSenderId: "865581696674",
+            appId: "1:865581696674:web:876ac3f6c5b34e1ccd39fb",
+            measurementId: "G-35KLQV8WSQ"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+
+        let prodotti = [];
+        let giacenze = [];
+        let eventi = [];
+
+        function trovaGiacenza({ giacenzaId, idProdotto, lotto, scadenza }) {
+            if (giacenzaId) {
+                const g = giacenze.find(x => x.id === giacenzaId);
+                if (g) return g;
+            }
+            if (!idProdotto || !lotto || !scadenza) return null;
+            return giacenze.find(g =>
+                g.idProdotto === idProdotto &&
+                g.lotto === lotto &&
+                g.scadenza === scadenza
+            ) || null;
+        }
+
+        function aggiornaGiacenzaLocale(id, dati) {
+            const idx = giacenze.findIndex(g => g.id === id);
+            if (idx >= 0) {
+                if (dati === null) giacenze.splice(idx, 1);
+                else giacenze[idx] = { ...giacenze[idx], ...dati };
+            }
+        }
+
+        function mostraMessaggio(testo) {
+            document.getElementById('modal-messaggio-testo').innerText = testo;
+            document.getElementById('modal-messaggio').classList.remove('hidden');
+        }
+
+        window.chiudiModalMessaggio = () => {
+            document.getElementById('modal-messaggio').classList.add('hidden');
+        };
+
+        function formattaDataOra(ts) {
+            if (!ts) return '-';
+            const d = ts.toDate ? ts.toDate() : new Date(ts);
+            return d.toLocaleDateString('it-IT') + ' ' + d.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
+        }
+
+        async function sincronizzaGiacenzaInventario(eOrig, eNuovo) {
+            const lotto = eNuovo.lotto || eOrig.lotto;
+            const scadenza = eNuovo.scadenza || eOrig.scadenza;
+            const quantita = eNuovo.quantita ?? eOrig.quantita ?? 0;
+            const idProdotto = eNuovo.idProdotto || eOrig.idProdotto;
+            const nome = eNuovo.nomeProdotto || eOrig.nomeProdotto;
+
+            if (!lotto || !scadenza || !idProdotto) return eOrig.giacenzaId || null;
+
+            const g = eOrig.giacenzaId
+                ? giacenze.find(x => x.id === eOrig.giacenzaId)
+                : trovaGiacenza(eOrig);
+
+            if (g) {
+                if (quantita <= 0) {
+                    await deleteDoc(doc(db, "giacenze", g.id));
+                    aggiornaGiacenzaLocale(g.id, null);
+                    return null;
+                }
+                const altro = giacenze.find(x =>
+                    x.id !== g.id &&
+                    x.idProdotto === idProdotto &&
+                    x.lotto === lotto &&
+                    x.scadenza === scadenza
+                );
+                if (altro) {
+                    await updateDoc(doc(db, "giacenze", altro.id), { quantita: altro.quantita + quantita, nome });
+                    aggiornaGiacenzaLocale(altro.id, { quantita: altro.quantita + quantita, nome });
+                    await deleteDoc(doc(db, "giacenze", g.id));
+                    aggiornaGiacenzaLocale(g.id, null);
+                    return altro.id;
+                }
+                await updateDoc(doc(db, "giacenze", g.id), { lotto, scadenza, quantita, idProdotto, nome });
+                aggiornaGiacenzaLocale(g.id, { lotto, scadenza, quantita, idProdotto, nome });
+                return g.id;
+            }
+
+            if (quantita > 0) {
+                const esistente = trovaGiacenza({ idProdotto, lotto, scadenza });
+                if (esistente) {
+                    const nuova = esistente.quantita + quantita;
+                    await updateDoc(doc(db, "giacenze", esistente.id), { quantita: nuova, nome });
+                    aggiornaGiacenzaLocale(esistente.id, { quantita: nuova, nome });
+                    return esistente.id;
+                }
+                const ref = await addDoc(collection(db, "giacenze"), { idProdotto, nome, lotto, scadenza, quantita });
+                giacenze.push({ id: ref.id, idProdotto, nome, lotto, scadenza, quantita });
+                return ref.id;
+            }
+            return null;
+        }
+
+        async function sincronizzaEventoMovimento(eOrig, eNuovo) {
+            if (eOrig.tipo !== 'ENTRATA' && eOrig.tipo !== 'USCITA') return eOrig.giacenzaId || null;
+
+            const gLinked = eOrig.giacenzaId
+                ? giacenze.find(x => x.id === eOrig.giacenzaId)
+                : trovaGiacenza(eOrig);
+
+            if (gLinked && eOrig.quantita > 0) {
+                let q = gLinked.quantita;
+                if (eOrig.tipo === 'ENTRATA') q -= eOrig.quantita;
+                else q += eOrig.quantita;
+
+                if (q <= 0) {
+                    await deleteDoc(doc(db, "giacenze", gLinked.id));
+                    aggiornaGiacenzaLocale(gLinked.id, null);
+                } else {
+                    await updateDoc(doc(db, "giacenze", gLinked.id), { quantita: q });
+                    aggiornaGiacenzaLocale(gLinked.id, { quantita: q });
+                }
+            }
+
+            if (eNuovo.tipo !== 'ENTRATA' && eNuovo.tipo !== 'USCITA') return eOrig.giacenzaId || null;
+            if (!eNuovo.quantita || !eNuovo.lotto || !eNuovo.scadenza || !eNuovo.idProdotto) return null;
+
+            const gLinkedAfter = eOrig.giacenzaId ? giacenze.find(x => x.id === eOrig.giacenzaId) : null;
+            const stesseChiavi =
+                eOrig.lotto === eNuovo.lotto &&
+                eOrig.scadenza === eNuovo.scadenza &&
+                eOrig.idProdotto === eNuovo.idProdotto;
+
+            let gTarget = null;
+
+            if (stesseChiavi && gLinkedAfter) {
+                gTarget = gLinkedAfter;
+            } else {
+                const gDest = trovaGiacenza(eNuovo);
+                if (gDest) gTarget = gDest;
+                else if (gLinkedAfter) gTarget = gLinkedAfter;
+            }
+
+            if (gTarget) {
+                let q = gTarget.quantita;
+                if (eNuovo.tipo === 'ENTRATA') q += eNuovo.quantita;
+                else {
+                    q -= eNuovo.quantita;
+                    if (q < 0) throw new Error('Quantità insufficiente per l\'uscita');
+                }
+
+                const update = {
+                    quantita: q,
+                    lotto: eNuovo.lotto,
+                    scadenza: eNuovo.scadenza,
+                    idProdotto: eNuovo.idProdotto,
+                    nome: eNuovo.nomeProdotto
+                };
+
+                if (q <= 0) {
+                    await deleteDoc(doc(db, "giacenze", gTarget.id));
+                    aggiornaGiacenzaLocale(gTarget.id, null);
+                    return null;
+                }
+                await updateDoc(doc(db, "giacenze", gTarget.id), update);
+                aggiornaGiacenzaLocale(gTarget.id, update);
+                return gTarget.id;
+            }
+
+            if (eNuovo.tipo === 'USCITA') throw new Error('Lotto non trovato in giacenza');
+
+            const ref = await addDoc(collection(db, "giacenze"), {
+                idProdotto: eNuovo.idProdotto,
+                nome: eNuovo.nomeProdotto,
+                lotto: eNuovo.lotto,
+                scadenza: eNuovo.scadenza,
+                quantita: eNuovo.quantita
+            });
+            giacenze.push({
+                id: ref.id,
+                idProdotto: eNuovo.idProdotto,
+                nome: eNuovo.nomeProdotto,
+                lotto: eNuovo.lotto,
+                scadenza: eNuovo.scadenza,
+                quantita: eNuovo.quantita
+            });
+            return ref.id;
+        }
+
+        function renderEventi() {
+            const cont = document.getElementById('eventi-lista');
+            if (eventi.length === 0) {
+                cont.innerHTML = '<p class="text-center text-gray-500 py-8">Nessun evento registrato</p>';
+                return;
+            }
+
+            const tipoColori = {
+                ENTRATA: 'bg-green-100 text-green-800 border-green-300',
+                USCITA: 'bg-red-100 text-red-800 border-red-300',
+                INVENTARIO: 'bg-yellow-100 text-yellow-800 border-yellow-300',
+                SETUP: 'bg-blue-100 text-blue-800 border-blue-300'
+            };
+
+            cont.innerHTML = eventi.map(e => `
+                <div class="bg-white p-4 rounded-xl shadow border-l-4 ${e.tipo === 'ENTRATA' ? 'border-green-500' : e.tipo === 'USCITA' ? 'border-red-500' : e.tipo === 'INVENTARIO' ? 'border-yellow-500' : 'border-blue-500'}">
+                    <div class="flex justify-between items-start mb-2">
+                        <span class="text-xs font-bold px-2 py-1 rounded border ${tipoColori[e.tipo] || 'bg-gray-100'}">${e.tipo || '—'}</span>
+                        <span class="text-xs text-gray-500">${formattaDataOra(e.timestamp)}</span>
+                    </div>
+                    <p class="font-bold text-sm">${e.nomeProdotto || '—'}</p>
+                    ${e.lotto ? `<p class="text-sm"><span class="font-bold">LOTTO ${e.lotto}</span>${e.scadenza ? ` · Scad: ${e.scadenza}` : ''}</p>` : ''}
+                    ${e.quantita ? `<p class="text-sm font-bold">${e.quantita} pedane</p>` : ''}
+                    ${e.nota ? `<p class="text-xs text-gray-500 mt-1">${e.nota}</p>` : ''}
+                    ${e.deviceId ? `<p class="text-xs text-gray-400 mt-1">Dispositivo: ${e.deviceId}</p>` : ''}
+                    <button onclick="apriModalModificaEvento('${e.id}')" class="mt-2 text-blue-600 text-xs font-bold">Modifica</button>
+                </div>
+            `).join('');
+        }
+
+        window.apriModalModificaEvento = (id) => {
+            const e = eventi.find(x => x.id === id);
+            if (!e) return;
+
+            document.getElementById('modal-evento-id').value = id;
+            document.getElementById('modal-evento-tipo').value = e.tipo || 'ENTRATA';
+
+            const selProd = document.getElementById('modal-evento-prodotto');
+            selProd.innerHTML = '<option value="">— Nessun prodotto —</option>' +
+                prodotti.map(p => `<option value="${p.id}">${p.nome}</option>`).join('');
+            if (e.idProdotto && prodotti.find(p => p.id === e.idProdotto)) {
+                selProd.value = e.idProdotto;
+            } else if (e.nomeProdotto) {
+                const match = prodotti.find(p => p.nome === e.nomeProdotto);
+                selProd.value = match ? match.id : '';
+            }
+
+            document.getElementById('modal-evento-lotto').value = e.lotto || '';
+            document.getElementById('modal-evento-scadenza').value = e.scadenza || '';
+            document.getElementById('modal-evento-quantita').value = e.quantita ?? '';
+            document.getElementById('modal-evento-nota').value = e.nota || '';
+            document.getElementById('modal-evento-timestamp').innerText = formattaDataOra(e.timestamp);
+            document.getElementById('modal-evento-device').innerText = e.deviceId || '—';
+            document.getElementById('modal-modifica-evento').classList.remove('hidden');
+        };
+
+        window.chiudiModalEvento = () => {
+            document.getElementById('modal-modifica-evento').classList.add('hidden');
+        };
+
+        window.salvaModificaEvento = async () => {
+            const id = document.getElementById('modal-evento-id').value;
+            const e = eventi.find(x => x.id === id);
+            if (!e) return;
+
+            const tipo = document.getElementById('modal-evento-tipo').value;
+            const pid = document.getElementById('modal-evento-prodotto').value;
+            const prodotto = prodotti.find(p => p.id === pid);
+            const lotto = document.getElementById('modal-evento-lotto').value.trim().toUpperCase();
+            const scadenza = document.getElementById('modal-evento-scadenza').value;
+            const quantita = parseInt(document.getElementById('modal-evento-quantita').value) || 0;
+            const nota = document.getElementById('modal-evento-nota').value.trim();
+
+            const datiNuovi = {
+                tipo,
+                lotto: lotto || null,
+                scadenza: scadenza || null,
+                quantita,
+                nota: nota || null
+            };
+
+            if (prodotto) {
+                datiNuovi.idProdotto = prodotto.id;
+                datiNuovi.nomeProdotto = prodotto.nome;
+            } else if (e.nomeProdotto) {
+                datiNuovi.nomeProdotto = e.nomeProdotto;
+                if (e.idProdotto) datiNuovi.idProdotto = e.idProdotto;
+            }
+
+            try {
+                const eventoFinale = { ...e, ...datiNuovi };
+                let nuovoGiacenzaId = e.giacenzaId || null;
+
+                if (e.tipo === 'ENTRATA' || e.tipo === 'USCITA' || datiNuovi.tipo === 'ENTRATA' || datiNuovi.tipo === 'USCITA') {
+                    nuovoGiacenzaId = await sincronizzaEventoMovimento(e, eventoFinale);
+                    if (nuovoGiacenzaId) datiNuovi.giacenzaId = nuovoGiacenzaId;
+                    else if (eventoFinale.tipo !== 'ENTRATA' && eventoFinale.tipo !== 'USCITA') datiNuovi.giacenzaId = null;
+                } else if (e.tipo === 'INVENTARIO' && (e.lotto || lotto) && (e.idProdotto || pid)) {
+                    nuovoGiacenzaId = await sincronizzaGiacenzaInventario(e, eventoFinale);
+                    if (nuovoGiacenzaId) datiNuovi.giacenzaId = nuovoGiacenzaId;
+                }
+
+                await updateDoc(doc(db, "eventi", id), datiNuovi);
+                chiudiModalEvento();
+                mostraMessaggio('Evento e giacenze aggiornati');
+            } catch (err) {
+                mostraMessaggio(err.message || 'Errore durante l\'aggiornamento');
+                console.error(err);
+            }
+        };
+
+        onSnapshot(collection(db, "prodotti"), (snap) => {
+            prodotti = snap.docs.map(d => ({...d.data(), id: d.id}));
+        });
+
+        onSnapshot(collection(db, "giacenze"), (snap) => {
+            giacenze = snap.docs.map(d => ({...d.data(), id: d.id}));
+        });
+
+        onSnapshot(query(collection(db, "eventi"), orderBy("timestamp", "desc")), (snap) => {
+            eventi = snap.docs.map(d => ({...d.data(), id: d.id}));
+            renderEventi();
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,691 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Gestione Pedane</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { -webkit-tap-highlight-color: transparent; user-select: none; }
+        .active-tab { background-color: #1e3a8a !important; color: white !important; }
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+    </style>
+</head>
+<body class="bg-gray-100 font-sans text-gray-800 flex flex-col min-h-screen pb-24">
+
+    <header class="bg-blue-800 text-white p-4 shadow-md sticky top-0 z-50 flex justify-between items-center">
+        <div>
+            <h1 class="text-xl font-bold tracking-wide">📦 Gestione Pedane</h1>
+            <span id="connection-status" class="text-xs opacity-80">Connesso al Cloud</span>
+        </div>
+        <div class="flex gap-2">
+            <a href="giacenze.html" class="text-xs bg-white bg-opacity-20 px-2 py-1 rounded-lg font-bold">📊</a>
+            <a href="eventi.html" class="text-xs bg-white bg-opacity-20 px-2 py-1 rounded-lg font-bold">📋</a>
+        </div>
+    </header>
+
+    <!-- Modal prelievo OUT -->
+    <div id="modal-uscita-lotto" class="fixed inset-0 z-[60] hidden flex items-center justify-center p-4 bg-black bg-opacity-50">
+        <div class="bg-white rounded-xl shadow-2xl w-full max-w-sm p-5">
+            <h3 class="text-lg font-bold text-blue-900 mb-1">Prelievo pedane</h3>
+            <p id="modal-uscita-lotto-info" class="text-sm text-gray-600 mb-1"></p>
+            <p id="modal-uscita-disponibili" class="text-sm font-bold text-green-700 mb-4"></p>
+            <label class="block text-sm font-semibold text-gray-700 mb-1">Numero pedane da prelevare</label>
+            <input type="number" id="modal-uscita-quantita" value="1" min="1" class="w-full p-3 border rounded-lg text-center font-bold mb-4">
+            <div class="grid grid-cols-2 gap-2">
+                <button onclick="chiudiModalUscita()" class="py-3 rounded-lg font-bold border-2 border-gray-300 text-gray-600">Annulla</button>
+                <button onclick="confermaUscita()" class="py-3 rounded-lg font-bold bg-red-600 text-white">Conferma</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal messaggio -->
+    <div id="modal-messaggio" class="fixed inset-0 z-[70] hidden flex items-center justify-center p-4 bg-black bg-opacity-50">
+        <div class="bg-white rounded-xl shadow-2xl w-full max-w-sm p-5">
+            <p id="modal-messaggio-testo" class="text-sm text-gray-700 mb-4"></p>
+            <button onclick="chiudiModalMessaggio()" class="w-full py-3 rounded-lg font-bold bg-blue-600 text-white">OK</button>
+        </div>
+    </div>
+
+    <!-- Modal conferma -->
+    <div id="modal-conferma" class="fixed inset-0 z-[70] hidden flex items-center justify-center p-4 bg-black bg-opacity-50">
+        <div class="bg-white rounded-xl shadow-2xl w-full max-w-sm p-5">
+            <p id="modal-conferma-testo" class="text-sm text-gray-700 mb-4"></p>
+            <div class="grid grid-cols-2 gap-2">
+                <button onclick="chiudiModalConferma(false)" class="py-3 rounded-lg font-bold border-2 border-gray-300 text-gray-600">Annulla</button>
+                <button onclick="chiudiModalConferma(true)" class="py-3 rounded-lg font-bold bg-red-600 text-white">Conferma</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal modifica prodotto setup -->
+    <div id="modal-modifica-prodotto" class="fixed inset-0 z-[60] hidden flex items-center justify-center p-4 bg-black bg-opacity-50">
+        <div class="bg-white rounded-xl shadow-2xl w-full max-w-sm p-5">
+            <h3 class="text-lg font-bold text-blue-900 mb-4">Modifica articolo</h3>
+            <input type="hidden" id="modal-prodotto-id">
+            <input type="text" id="modal-prodotto-nome" class="w-full p-3 border rounded-lg uppercase font-bold mb-4" placeholder="Nome articolo">
+            <div class="grid grid-cols-2 gap-2">
+                <button onclick="chiudiModalModificaProdotto()" class="py-3 rounded-lg font-bold border-2 border-gray-300 text-gray-600">Annulla</button>
+                <button onclick="salvaModificaProdotto()" class="py-3 rounded-lg font-bold bg-blue-600 text-white">Salva</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal modifica lotto inventario -->
+    <div id="modal-inventario-lotto" class="fixed inset-0 z-[60] hidden flex items-center justify-center p-4 bg-black bg-opacity-50">
+        <div class="bg-white rounded-xl shadow-2xl w-full max-w-sm p-5">
+            <h3 class="text-lg font-bold text-blue-900 mb-1">Modifica lotto</h3>
+            <p id="modal-inv-prodotto-nome" class="text-sm text-gray-600 mb-4"></p>
+            <input type="hidden" id="modal-inv-giacenza-id">
+            <input type="hidden" id="modal-inv-prodotto-id">
+            <div class="space-y-3">
+                <div>
+                    <label class="block text-xs font-semibold text-gray-600 mb-1">Lotto</label>
+                    <input type="text" id="modal-inv-lotto" class="w-full p-3 border rounded-lg text-sm uppercase font-bold" placeholder="Lotto">
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-gray-600 mb-1">Scadenza</label>
+                    <input type="date" id="modal-inv-scadenza" class="w-full p-3 border rounded-lg text-sm">
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-gray-600 mb-1">Pedane</label>
+                    <input type="number" id="modal-inv-quantita" min="0" class="w-full p-3 border rounded-lg text-sm font-bold text-center">
+                </div>
+            </div>
+            <div class="grid grid-cols-2 gap-2 mt-4">
+                <button onclick="chiudiModalInventario()" class="py-3 rounded-lg font-bold border-2 border-gray-300 text-gray-600">Annulla</button>
+                <button onclick="salvaInventarioLotto()" class="py-3 rounded-lg font-bold bg-blue-600 text-white">Salva</button>
+            </div>
+        </div>
+    </div>
+
+    <main class="flex-grow p-4 max-w-md mx-auto w-full">
+        <section id="section-movimentazione" class="tab-content active">
+            <h2 class="text-lg font-bold mb-4 text-blue-900 border-b pb-2">🔄 Movimentazione</h2>
+            <div class="bg-white p-4 rounded-xl shadow space-y-4">
+                <select id="mov-prodotto" onchange="aggiornaVistaOUT()" class="w-full p-3 border rounded-lg bg-white"></select>
+                <div class="grid grid-cols-2 gap-2">
+                    <button id="btn-tipo-entrata" onclick="setTipoMovimento('ENTRATA')" class="py-3 rounded-lg font-bold border-2 border-green-600 bg-green-50 text-green-700">📥 IN</button>
+                    <button id="btn-tipo-uscita" onclick="setTipoMovimento('USCITA')" class="py-3 rounded-lg font-bold border-2 border-gray-300 text-gray-500">📤 OUT</button>
+                </div>
+                
+                <div id="container-carico-manuale" class="space-y-3">
+                    <input type="number" id="mov-quantita" value="1" min="1" class="w-full p-3 border rounded-lg text-center font-bold">
+                    <input type="text" id="mov-lotto" placeholder="Lotto" class="w-full p-3 border rounded-lg uppercase">
+                    <input type="date" id="mov-scadenza" class="w-full p-3 border rounded-lg">
+                    <button onclick="registraMovimento()" class="w-full bg-green-600 text-white py-4 rounded-xl font-bold">REGISTRA MOVIMENTO</button>
+                </div>
+
+                <div id="container-scarico-lotti" class="space-y-3 hidden">
+                    <p class="text-sm font-semibold text-gray-600 text-center">Seleziona lotto da scaricare:</p>
+                    <div id="lista-lotti-prelievo" class="space-y-2"></div>
+                </div>
+            </div>
+        </section>
+
+        <section id="section-giacenza" class="tab-content">
+            <h2 class="text-lg font-bold mb-4 text-blue-900">📊 Giacenze</h2>
+            <p class="text-xs text-gray-500 mb-3">Sola visualizzazione</p>
+            <div id="giacenza-lista" class="space-y-3"></div>
+        </section>
+
+        <section id="section-inventario" class="tab-content">
+            <h2 class="text-lg font-bold mb-4 text-blue-900">📝 Inventario</h2>
+            <div id="inventario-container" class="space-y-4"></div>
+        </section>
+
+        <section id="section-setup" class="tab-content">
+            <h2 class="text-lg font-bold mb-4">⚙️ Setup</h2>
+            <div class="bg-white p-4 rounded-xl shadow mb-4">
+                <input type="text" id="setup-nome-prodotto" placeholder="Nome Articolo" class="w-full p-3 border rounded-lg mb-2">
+                <button onclick="aggiungiProdotto()" class="w-full bg-green-600 text-white py-3 rounded-lg font-bold">Aggiungi</button>
+            </div>
+            <ul id="setup-lista-prodotti" class="bg-white rounded-xl shadow p-4 divide-y"></ul>
+        </section>
+    </main>
+
+    <nav class="fixed bottom-0 left-0 right-0 bg-white border-t flex justify-around py-2 shadow-lg z-50">
+        <button onclick="switchTab('movimentazione')" id="nav-movimentazione" class="flex flex-col items-center active-tab py-1 w-full text-xs font-bold"><span>🔄</span>MOVIMENTO</button>
+        <button onclick="switchTab('giacenza')" id="nav-giacenza" class="flex flex-col items-center py-1 w-full text-xs font-bold"><span>📊</span>GIACENZE</button>
+        <button onclick="switchTab('inventario')" id="nav-inventario" class="flex flex-col items-center py-1 w-full text-xs font-bold"><span>📝</span>INVENTARIO</button>
+        <button onclick="switchTab('setup')" id="nav-setup" class="flex flex-col items-center py-1 w-full text-xs font-bold"><span>⚙️</span>Setup</button>
+    </nav>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+        import { getFirestore, collection, addDoc, onSnapshot, deleteDoc, doc, updateDoc, Timestamp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyB0daUTnfyhdyWPpkmFoPcyAguyZq63NE0",
+            authDomain: "gestionepedane.firebaseapp.com",
+            projectId: "gestionepedane",
+            storageBucket: "gestionepedane.firebasestorage.app",
+            messagingSenderId: "865581696674",
+            appId: "1:865581696674:web:876ac3f6c5b34e1ccd39fb",
+            measurementId: "G-35KLQV8WSQ"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+        window.db = db;
+        const DEVICE_ID = 'D-' + Math.floor(Math.random() * 1000);
+
+        let tipoMovimento = 'ENTRATA';
+        let prodotti = [];
+        let giacenze = [];
+        let lottoSelezionatoUscita = null;
+        let confermaCallback = null;
+
+        function aggiornaGiacenzaLocale(id, dati) {
+            const idx = giacenze.findIndex(g => g.id === id);
+            if (idx >= 0) {
+                if (dati === null) giacenze.splice(idx, 1);
+                else giacenze[idx] = { ...giacenze[idx], ...dati };
+            }
+        }
+
+        function mostraMessaggio(testo) {
+            document.getElementById('modal-messaggio-testo').innerText = testo;
+            document.getElementById('modal-messaggio').classList.remove('hidden');
+        }
+
+        window.chiudiModalMessaggio = () => {
+            document.getElementById('modal-messaggio').classList.add('hidden');
+        };
+
+        function mostraConferma(testo) {
+            return new Promise(resolve => {
+                confermaCallback = resolve;
+                document.getElementById('modal-conferma-testo').innerText = testo;
+                document.getElementById('modal-conferma').classList.remove('hidden');
+            });
+        }
+
+        window.chiudiModalConferma = (esito) => {
+            document.getElementById('modal-conferma').classList.add('hidden');
+            if (confermaCallback) confermaCallback(esito);
+            confermaCallback = null;
+        };
+
+        window.onload = () => {
+            onSnapshot(collection(db, "prodotti"), (snap) => {
+                prodotti = snap.docs.map(d => ({...d.data(), id: d.id}));
+                updateSelectProdotti();
+                renderSetup();
+                renderGiacenze();
+                if (document.getElementById('section-inventario').classList.contains('active')) renderInventario();
+            });
+
+            onSnapshot(collection(db, "giacenze"), (snap) => {
+                giacenze = snap.docs.map(d => ({...d.data(), id: d.id}));
+                renderGiacenze();
+                aggiornaVistaOUT();
+                if (document.getElementById('section-inventario').classList.contains('active')) renderInventario();
+            });
+        };
+
+
+// Aggiungi questa funzione
+function formattaData(dataStringa) {
+    if (!dataStringa) return "";
+    // Gestione se la data contiene l'orario (es: 2026-09-14T...)
+    const soloData = dataStringa.split('T')[0]; 
+    const parti = soloData.split('-');
+    if (parti.length === 3) {
+        return `${parti[2]}-${parti[1]}-${parti[0]}`;
+    }
+    return dataStringa;
+}
+
+        function mostraNotifica(m, t='successo') {
+            mostraMessaggio(m);
+        }
+
+        async function registraEvento(dati) {
+            await addDoc(collection(db, "eventi"), {
+                ...dati,
+                timestamp: Timestamp.now(),
+                deviceId: DEVICE_ID
+            });
+        }
+
+        function switchTab(tabId) {
+            document.querySelectorAll('.tab-content').forEach(s => s.classList.remove('active'));
+            document.getElementById(`section-${tabId}`).classList.add('active');
+            document.querySelectorAll('nav button').forEach(b => b.classList.remove('active-tab'));
+            document.getElementById(`nav-${tabId}`).classList.add('active-tab');
+            if (tabId === 'inventario') renderInventario();
+        }
+
+        window.setTipoMovimento = (t) => {
+            tipoMovimento = t;
+            lottoSelezionatoUscita = null;
+            document.getElementById('btn-tipo-entrata').className = (t === 'ENTRATA') ? "py-3 rounded-lg font-bold border-2 border-green-600 bg-green-50 text-green-700" : "py-3 rounded-lg font-bold border-2 border-gray-300 text-gray-500";
+            document.getElementById('btn-tipo-uscita').className = (t === 'USCITA') ? "py-3 rounded-lg font-bold border-2 border-red-600 bg-red-50 text-red-700" : "py-3 rounded-lg font-bold border-2 border-gray-300 text-gray-500";
+            document.getElementById('container-carico-manuale').classList.toggle('hidden', t === 'USCITA');
+            document.getElementById('container-scarico-lotti').classList.toggle('hidden', t === 'ENTRATA');
+            aggiornaVistaOUT();
+        };
+
+        function updateSelectProdotti() {
+            const sel = document.getElementById('mov-prodotto');
+            if (prodotti.length === 0) {
+                sel.innerHTML = '<option value="">Nessun prodotto</option>';
+                return;
+            }
+            sel.innerHTML = prodotti.map(p => `<option value="${p.id}">${p.nome}</option>`).join('');
+        }
+
+        function aggiornaVistaOUT() {
+            if (tipoMovimento !== 'USCITA') return;
+            const pid = document.getElementById('mov-prodotto').value;
+            const cont = document.getElementById('lista-lotti-prelievo');
+            const lotti = giacenze.filter(g => g.idProdotto === pid && g.quantita > 0);
+
+            if (lotti.length === 0) {
+                cont.innerHTML = '<p class="text-center text-gray-500 text-sm py-4">Nessun lotto disponibile</p>';
+                lottoSelezionatoUscita = null;
+                return;
+            }
+
+            if (lottoSelezionatoUscita && !lotti.find(g => g.id === lottoSelezionatoUscita)) {
+                lottoSelezionatoUscita = null;
+            }
+
+            cont.innerHTML = lotti.map(g => `
+                <div onclick="selezionaLottoUscita('${g.id}')" id="lotto-row-${g.id}"
+                     class="bg-gray-50 p-3 rounded-lg flex justify-between items-center border cursor-pointer ${lottoSelezionatoUscita === g.id ? 'border-red-600 bg-red-50 ring-2 ring-red-300' : ''}">
+                    <div>
+                        <span class="font-bold">LOTTO ${g.lotto}</span><br>
+                        <small class="text-gray-500">Scad: ${g.scadenza}</small>
+                    </div>
+                    <span class="font-bold text-red-700">${g.quantita} pedane</span>
+                </div>
+            `).join('');
+        }
+
+        window.selezionaLottoUscita = (id) => {
+            const g = giacenze.find(x => x.id === id);
+            if (!g) return;
+
+            lottoSelezionatoUscita = id;
+            aggiornaVistaOUT();
+
+            document.getElementById('modal-uscita-lotto-info').innerText = `${g.nome} — LOTTO ${g.lotto} (Scad: ${g.scadenza})`;
+            document.getElementById('modal-uscita-disponibili').innerText = `Disponibili: ${g.quantita} pedane`;
+            const inputQta = document.getElementById('modal-uscita-quantita');
+            inputQta.value = "1";
+            inputQta.max = g.quantita;
+            document.getElementById('modal-uscita-lotto').classList.remove('hidden');
+        };
+
+        window.chiudiModalUscita = () => {
+            document.getElementById('modal-uscita-lotto').classList.add('hidden');
+            lottoSelezionatoUscita = null;
+            aggiornaVistaOUT();
+        };
+
+        window.confermaUscita = async () => {
+            if (!lottoSelezionatoUscita) return mostraNotifica("Seleziona un lotto", "errore");
+
+            const g = giacenze.find(x => x.id === lottoSelezionatoUscita);
+            if (!g) return mostraNotifica("Lotto non trovato", "errore");
+
+            const qta = parseInt(document.getElementById('modal-uscita-quantita').value);
+            if (!qta || qta < 1) return mostraNotifica("Quantità non valida", "errore");
+            if (qta > g.quantita) return mostraNotifica(`Disponibili solo ${g.quantita} pedane`, "errore");
+
+            const nuovaQta = g.quantita - qta;
+            if (nuovaQta <= 0) {
+                await deleteDoc(doc(db, "giacenze", g.id));
+            } else {
+                await updateDoc(doc(db, "giacenze", g.id), { quantita: nuovaQta });
+            }
+
+            await registraEvento({
+                tipo: 'USCITA',
+                idProdotto: g.idProdotto,
+                nomeProdotto: g.nome,
+                lotto: g.lotto,
+                scadenza: g.scadenza,
+                quantita: qta,
+                giacenzaId: g.id
+            });
+
+            chiudiModalUscita();
+            mostraNotifica(`Uscite ${qta} pedane`);
+        };
+
+        async function registraMovimento() {
+            const pid = document.getElementById('mov-prodotto').value;
+            const p = prodotti.find(x => x.id === pid);
+            if (!p) return mostraNotifica("Seleziona un prodotto", "errore");
+
+            const lotto = document.getElementById('mov-lotto').value.trim().toUpperCase();
+            const scad = document.getElementById('mov-scadenza').value;
+            const qta = parseInt(document.getElementById('mov-quantita').value);
+            
+            if (!lotto || !scad || !qta) return mostraNotifica("Compila tutto", "errore");
+
+            const esistente = giacenze.find(g => g.idProdotto === pid && g.lotto === lotto && g.scadenza === scad);
+            let giacenzaId;
+            if (esistente) {
+                await updateDoc(doc(db, "giacenze", esistente.id), { quantita: esistente.quantita + qta });
+                giacenzaId = esistente.id;
+            } else {
+                const ref = await addDoc(collection(db, "giacenze"), { idProdotto: pid, nome: p.nome, lotto, scadenza: scad, quantita: qta });
+                giacenzaId = ref.id;
+            }
+
+            await registraEvento({
+                tipo: 'ENTRATA',
+                idProdotto: pid,
+                nomeProdotto: p.nome,
+                lotto,
+                scadenza: scad,
+                quantita: qta,
+                giacenzaId
+            });
+
+            mostraNotifica("Registrato!");
+            document.getElementById('mov-quantita').value = "1";
+            document.getElementById('mov-lotto').value = "";
+            document.getElementById('mov-scadenza').value = "";
+        }
+
+        function renderGiacenze() {
+            const cont = document.getElementById('giacenza-lista');
+            if (prodotti.length === 0) {
+                cont.innerHTML = '<p class="text-center text-gray-500 py-8">Nessun prodotto registrato</p>';
+                return;
+            }
+
+            const html = prodotti.map(p => {
+                const lotti = giacenze.filter(g => g.idProdotto === p.id && g.quantita > 0);
+                const totale = lotti.reduce((s, g) => s + g.quantita, 0);
+                const badgeClass = totale > 0 ? 'bg-green-600 text-white' : 'bg-gray-400 text-white';
+                return `
+                    <div class="bg-white p-4 rounded-xl shadow mb-3">
+                        <div class="flex justify-between items-center border-b pb-2 mb-2">
+                            <h3 class="font-bold text-blue-900">${p.nome}</h3>
+                            <span class="${badgeClass} font-bold px-3 py-1 rounded-lg text-sm">${totale} pedane</span>
+                        </div>
+                        ${lotti.length > 0 ? `
+                            <div class="grid grid-cols-3 gap-2 text-xs font-bold text-gray-500 border-b pb-1 mb-1">
+                                <span>Lotto</span>
+                                <span>Scadenza</span>
+                                <span class="text-right">Pedane</span>
+                            </div>
+                            ${lotti.map(g => `
+                                <div class="grid grid-cols-3 gap-2 py-2 text-sm border-b border-gray-100 last:border-0">
+                                    <span class="font-bold">${g.lotto}</span>
+                                    <span class="text-gray-600">${formattaData(g.scadenza)}</span>
+                                    <span class="font-bold text-right">${g.quantita}</span>
+                                </div>
+                            `).join('')}
+                        ` : '<p class="text-sm text-gray-400 py-2">Nessun lotto in giacenza</p>'}
+                    </div>`;
+            }).join('');
+
+            cont.innerHTML = html;
+        }
+
+        function renderInventario() {
+            const cont = document.getElementById('inventario-container');
+
+            if (prodotti.length === 0) {
+                cont.innerHTML = '<p class="text-center text-gray-500 py-8">Aggiungi prodotti in Setup</p>';
+                return;
+            }
+
+            cont.innerHTML = prodotti.map(p => {
+                const lotti = giacenze.filter(g => g.idProdotto === p.id);
+                const totale = lotti.reduce((s, g) => s + (g.quantita || 0), 0);
+                return `
+                    <div class="bg-white p-4 rounded-xl shadow">
+                        <div class="flex justify-between items-center border-b mb-3 pb-2">
+                            <h3 class="font-bold text-blue-900">${p.nome}</h3>
+                            <span class="font-bold text-sm text-gray-700">${totale} pedane</span>
+                        </div>
+                        <div id="inv-lotti-${p.id}" class="space-y-2">
+                            ${lotti.length === 0 ? '<p class="text-sm text-gray-400">Nessun lotto — aggiungine uno</p>' : lotti.map(g => `
+                                <div class="flex items-center gap-2">
+                                    <div onclick="apriModalInventarioLotto('${g.id}', '${p.id}')"
+                                         class="flex-1 bg-gray-50 border border-gray-200 rounded-lg p-3 cursor-pointer active:bg-gray-100">
+                                        <span class="text-sm"><span class="font-bold">${g.lotto}</span> · Scad: ${formattaData(g.scadenza)} · <span class="font-bold">${g.quantita}</span> ped.</span>
+                                    </div>
+                                    <button onclick="event.stopPropagation(); eliminaRigaInventario('${g.id}')"
+                                            class="text-red-600 font-bold text-xl w-9 h-9 flex-shrink-0 flex items-center justify-center rounded-lg hover:bg-red-50" title="Elimina">✕</button>
+                                </div>
+                            `).join('')}
+                        </div>
+                        <button onclick="apriModalInventarioLotto(null, '${p.id}')" class="mt-3 w-full py-2 border-2 border-dashed border-blue-300 text-blue-700 rounded-lg text-sm font-bold">+ Aggiungi lotto</button>
+                    </div>`;
+            }).join('');
+        }
+
+        window.apriModalInventarioLotto = (giacenzaId, prodottoId) => {
+            const p = prodotti.find(x => x.id === prodottoId);
+            if (!p) return;
+
+            document.getElementById('modal-inv-giacenza-id').value = giacenzaId || '';
+            document.getElementById('modal-inv-prodotto-id').value = prodottoId;
+            document.getElementById('modal-inv-prodotto-nome').innerText = p.nome;
+
+            if (giacenzaId) {
+                const g = giacenze.find(x => x.id === giacenzaId);
+                document.getElementById('modal-inv-lotto').value = g?.lotto || '';
+                document.getElementById('modal-inv-scadenza').value = g?.scadenza || '';
+                document.getElementById('modal-inv-quantita').value = g?.quantita ?? 0;
+            } else {
+                document.getElementById('modal-inv-lotto').value = '';
+                document.getElementById('modal-inv-scadenza').value = '';
+                document.getElementById('modal-inv-quantita').value = 0;
+            }
+
+            document.getElementById('modal-inventario-lotto').classList.remove('hidden');
+        };
+
+        window.chiudiModalInventario = () => {
+            document.getElementById('modal-inventario-lotto').classList.add('hidden');
+        };
+
+        window.salvaInventarioLotto = async () => {
+            const giacenzaId = document.getElementById('modal-inv-giacenza-id').value;
+            const prodottoId = document.getElementById('modal-inv-prodotto-id').value;
+            const p = prodotti.find(x => x.id === prodottoId);
+            if (!p) return;
+
+            const lotto = document.getElementById('modal-inv-lotto').value.trim().toUpperCase();
+            const scadenza = document.getElementById('modal-inv-scadenza').value;
+            const quantita = parseInt(document.getElementById('modal-inv-quantita').value) || 0;
+
+            if (!lotto || !scadenza) return mostraNotifica('Compila lotto e scadenza', 'errore');
+
+            const dati = { idProdotto: prodottoId, nome: p.nome, lotto, scadenza, quantita };
+
+            if (giacenzaId) {
+                const altro = giacenze.find(g =>
+                    g.id !== giacenzaId &&
+                    g.idProdotto === prodottoId &&
+                    g.lotto === lotto &&
+                    g.scadenza === scadenza
+                );
+                if (altro && quantita > 0) {
+                    await updateDoc(doc(db, "giacenze", altro.id), { quantita: altro.quantita + quantita });
+                    await deleteDoc(doc(db, "giacenze", giacenzaId));
+                    await registraEvento({
+                        tipo: 'INVENTARIO',
+                        idProdotto: prodottoId,
+                        nomeProdotto: p.nome,
+                        lotto,
+                        scadenza,
+                        quantita: altro.quantita + quantita,
+                        giacenzaId: altro.id,
+                        nota: 'Modifica lotto inventario'
+                    });
+                } else if (quantita <= 0) {
+                    await deleteDoc(doc(db, "giacenze", giacenzaId));
+                    await registraEvento({
+                        tipo: 'INVENTARIO',
+                        idProdotto: prodottoId,
+                        nomeProdotto: p.nome,
+                        lotto,
+                        scadenza,
+                        quantita: 0,
+                        giacenzaId,
+                        nota: 'Eliminazione lotto'
+                    });
+                } else {
+                    await updateDoc(doc(db, "giacenze", giacenzaId), dati);
+                    await registraEvento({
+                        tipo: 'INVENTARIO',
+                        idProdotto: prodottoId,
+                        nomeProdotto: p.nome,
+                        lotto,
+                        scadenza,
+                        quantita,
+                        giacenzaId,
+                        nota: 'Modifica lotto inventario'
+                    });
+                }
+            } else if (quantita > 0) {
+                const esistente = giacenze.find(g =>
+                    g.idProdotto === prodottoId && g.lotto === lotto && g.scadenza === scadenza
+                );
+                if (esistente) {
+                    await updateDoc(doc(db, "giacenze", esistente.id), { quantita: esistente.quantita + quantita });
+                    await registraEvento({
+                        tipo: 'INVENTARIO',
+                        idProdotto: prodottoId,
+                        nomeProdotto: p.nome,
+                        lotto,
+                        scadenza,
+                        quantita: esistente.quantita + quantita,
+                        giacenzaId: esistente.id,
+                        nota: 'Aggiornamento lotto inventario'
+                    });
+                } else {
+                const ref = await addDoc(collection(db, "giacenze"), dati);
+                await registraEvento({
+                    tipo: 'INVENTARIO',
+                    idProdotto: prodottoId,
+                    nomeProdotto: p.nome,
+                    lotto,
+                    scadenza,
+                    quantita,
+                    giacenzaId: ref.id,
+                    nota: 'Nuovo lotto inventario'
+                });
+                }
+            }
+
+            chiudiModalInventario();
+            mostraNotifica('Inventario aggiornato');
+        };
+
+        window.eliminaRigaInventario = async (giacenzaId) => {
+            const confermato = await mostraConferma('Eliminare questo lotto dall\'inventario?');
+            if (!confermato) return;
+            const g = giacenze.find(x => x.id === giacenzaId);
+            await deleteDoc(doc(db, "giacenze", giacenzaId));
+            aggiornaGiacenzaLocale(giacenzaId, null);
+            await registraEvento({
+                tipo: 'INVENTARIO',
+                idProdotto: g?.idProdotto || null,
+                nomeProdotto: g?.nome || '',
+                lotto: g?.lotto || '',
+                scadenza: g?.scadenza || null,
+                quantita: 0,
+                quantitaPrecedente: g?.quantita || 0,
+                giacenzaId,
+                nota: 'Eliminazione lotto'
+            });
+            mostraNotifica('Lotto eliminato');
+        };
+
+        function renderSetup() {
+            const list = document.getElementById('setup-lista-prodotti');
+            if (prodotti.length === 0) {
+                list.innerHTML = '<li class="py-4 text-center text-gray-500">Nessun prodotto inserito</li>';
+                return;
+            }
+            list.innerHTML = prodotti.map(p => `
+                <li class="py-3 flex justify-between items-center gap-2">
+                    <span class="font-bold flex-1" id="setup-nome-${p.id}">${p.nome}</span>
+                    <div class="flex gap-2">
+                        <button onclick="modificaProdotto('${p.id}')" class="bg-blue-100 text-blue-700 px-3 py-1 rounded-lg text-sm font-bold">Modifica</button>
+                        <button onclick="eliminaProdotto('${p.id}')" class="bg-red-100 text-red-700 px-3 py-1 rounded-lg text-sm font-bold">Elimina</button>
+                    </div>
+                </li>
+            `).join('');
+        }
+
+        window.modificaProdotto = (id) => {
+            const p = prodotti.find(x => x.id === id);
+            if (!p) return;
+            document.getElementById('modal-prodotto-id').value = id;
+            document.getElementById('modal-prodotto-nome').value = p.nome;
+            document.getElementById('modal-modifica-prodotto').classList.remove('hidden');
+        };
+
+        window.chiudiModalModificaProdotto = () => {
+            document.getElementById('modal-modifica-prodotto').classList.add('hidden');
+        };
+
+        window.salvaModificaProdotto = async () => {
+            const id = document.getElementById('modal-prodotto-id').value;
+            const p = prodotti.find(x => x.id === id);
+            if (!p) return;
+
+            const nuovoNome = document.getElementById('modal-prodotto-nome').value.trim().toUpperCase();
+            if (!nuovoNome || nuovoNome === p.nome) {
+                chiudiModalModificaProdotto();
+                return;
+            }
+
+            await updateDoc(doc(db, "prodotti", id), { nome: nuovoNome });
+
+            const lottiProdotto = giacenze.filter(g => g.idProdotto === id);
+            for (const g of lottiProdotto) {
+                await updateDoc(doc(db, "giacenze", g.id), { nome: nuovoNome });
+            }
+
+            await registraEvento({ tipo: 'SETUP', nomeProdotto: p.nome, nota: `Rinominato in ${nuovoNome}` });
+            chiudiModalModificaProdotto();
+            mostraNotifica('Prodotto modificato');
+        };
+
+        window.eliminaProdotto = async (id) => {
+            const p = prodotti.find(x => x.id === id);
+            if (!p) return;
+            const confermato = await mostraConferma(`Eliminare "${p.nome}" e tutte le giacenze associate?`);
+            if (!confermato) return;
+
+            const lottiProdotto = giacenze.filter(g => g.idProdotto === id);
+            for (const g of lottiProdotto) {
+                await deleteDoc(doc(db, "giacenze", g.id));
+            }
+            await deleteDoc(doc(db, "prodotti", id));
+            await registraEvento({ tipo: 'SETUP', nomeProdotto: p.nome, nota: 'Prodotto eliminato' });
+            mostraNotifica('Prodotto eliminato');
+        };
+
+        async function aggiungiProdotto() {
+            const nome = document.getElementById('setup-nome-prodotto').value.trim().toUpperCase();
+            if (!nome) return mostraNotifica('Inserisci un nome', 'errore');
+            await addDoc(collection(db, "prodotti"), { nome });
+            await registraEvento({ tipo: 'SETUP', nomeProdotto: nome, nota: 'Prodotto aggiunto' });
+            document.getElementById('setup-nome-prodotto').value = '';
+            mostraNotifica('Prodotto aggiunto');
+        }
+
+        window.aggiungiProdotto = aggiungiProdotto;
+        window.switchTab = switchTab;
+        window.registraMovimento = registraMovimento;
+        window.renderGiacenze = renderGiacenze;
+        window.renderInventario = renderInventario;
+    </script>
+</body>
+</html>

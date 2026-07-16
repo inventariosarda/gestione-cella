@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Giacenze - Gestione Pedane</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { -webkit-tap-highlight-color: transparent; }
+    </style>
+</head>
+<body class="bg-gray-100 font-sans text-gray-800 flex flex-col min-h-screen">
+
+    <header class="bg-blue-800 text-white p-4 shadow-md sticky top-0 z-50">
+        <div>
+            <h1 class="text-xl font-bold tracking-wide">📊 Giacenze</h1>
+            <span class="text-xs opacity-80">Sola visualizzazione</span>
+        </div>
+    </header>
+
+    <main class="flex-grow p-4 max-w-md mx-auto w-full">
+        <div id="giacenza-lista" class="space-y-3"></div>
+    </main>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+        import { getFirestore, collection, onSnapshot } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyB0daUTnfyhdyWPpkmFoPcyAguyZq63NE0",
+            authDomain: "gestionepedane.firebaseapp.com",
+            projectId: "gestionepedane",
+            storageBucket: "gestionepedane.firebasestorage.app",
+            messagingSenderId: "865581696674",
+            appId: "1:865581696674:web:876ac3f6c5b34e1ccd39fb",
+            measurementId: "G-35KLQV8WSQ"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+
+        let prodotti = [];
+        let giacenze = [];
+
+        function formattaData(dataStringa) {
+            if (!dataStringa) return "";
+            const soloData = dataStringa.toString().split('T')[0]; 
+            const parti = soloData.split('-');
+            if (parti.length === 3) {
+                return `${parti[2]}-${parti[1]}-${parti[0]}`;
+            }
+            return dataStringa;
+        }
+
+        function renderGiacenze() {
+            const cont = document.getElementById('giacenza-lista');
+            if (prodotti.length === 0) {
+                cont.innerHTML = '<p class="text-center text-gray-500 py-8">Nessun prodotto registrato</p>';
+                return;
+            }
+
+            cont.innerHTML = prodotti.map(p => {
+                const lotti = giacenze.filter(g => g.idProdotto === p.id && g.quantita > 0);
+                const totale = lotti.reduce((s, g) => s + g.quantita, 0);
+                const badgeClass = totale > 0 ? 'bg-green-600 text-white' : 'bg-gray-400 text-white';
+                return `
+                    <div class="bg-white p-4 rounded-xl shadow mb-3">
+                        <div class="flex justify-between items-center border-b pb-2 mb-2">
+                            <h3 class="font-bold text-blue-900">${p.nome}</h3>
+                            <span class="${badgeClass} font-bold px-3 py-1 rounded-lg text-sm">${totale} pedane</span>
+                        </div>
+                        ${lotti.length > 0 ? `
+                            <div class="grid grid-cols-3 gap-2 text-xs font-bold text-gray-500 border-b pb-1 mb-1">
+                                <span>Lotto</span>
+                                <span>Scadenza</span>
+                                <span class="text-right">Pedane</span>
+                            </div>
+                            ${lotti.map(g => `
+                                <div class="grid grid-cols-3 gap-2 py-2 text-sm border-b border-gray-100 last:border-0">
+                                    <span class="font-bold">${g.lotto}</span>
+                                    <span class="text-gray-600">${formattaData(g.scadenza)}</span>
+                                    <span class="font-bold text-right">${g.quantita}</span>
+                                </div>
+                            `).join('')}
+                        ` : '<p class="text-sm text-gray-400 py-2">Nessun lotto in giacenza</p>'}
+                    </div>`;
+            }).join('');
+        }
+
+        onSnapshot(collection(db, "prodotti"), (snap) => {
+            prodotti = snap.docs.map(d => ({...d.data(), id: d.id}));
+            renderGiacenze();
+        });
+
+        onSnapshot(collection(db, "giacenze"), (snap) => {
+            giacenze = snap.docs.map(d => ({...d.data(), id: d.id}));
+            renderGiacenze();
+        });
+    </script>
+</body>
+</html>
