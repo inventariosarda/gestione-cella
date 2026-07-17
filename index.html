@@ -279,36 +279,36 @@ function formattaData(dataStringa) {
         }
 
 function aggiornaVistaOUT() {
-    if (tipoMovimento !== 'USCITA') return;
+    // Rimuoviamo il controllo 'if (tipoMovimento !== 'USCITA') return;'
     
-    // AGGIUNTA: se non abbiamo ancora scaricato i prodotti, fermati
-    if (prodotti.length === 0) return; 
+    // Manteniamo il controllo di sicurezza per i prodotti
+    if (prodotti.length === 0) return;
 
     const pid = document.getElementById('mov-prodotto').value;
     const cont = document.getElementById('lista-lotti-prelievo');
     const lotti = giacenze.filter(g => g.idProdotto === pid && g.quantita > 0);
 
-            if (lotti.length === 0) {
-                cont.innerHTML = '<p class="text-center text-gray-500 text-sm py-4">Nessun lotto disponibile</p>';
-                lottoSelezionatoUscita = null;
-                return;
-            }
+    if (lotti.length === 0) {
+        cont.innerHTML = '<p class="text-center text-gray-500 text-sm py-4">Nessun lotto disponibile</p>';
+        lottoSelezionatoUscita = null;
+        return;
+    }
 
-            if (lottoSelezionatoUscita && !lotti.find(g => g.id === lottoSelezionatoUscita)) {
-                lottoSelezionatoUscita = null;
-            }
+    if (lottoSelezionatoUscita && !lotti.find(g => g.id === lottoSelezionatoUscita)) {
+        lottoSelezionatoUscita = null;
+    }
 
-            cont.innerHTML = lotti.map(g => `
-                <div onclick="selezionaLottoUscita('${g.id}')" id="lotto-row-${g.id}"
-                     class="bg-gray-50 p-3 rounded-lg flex justify-between items-center border cursor-pointer ${lottoSelezionatoUscita === g.id ? 'border-red-600 bg-red-50 ring-2 ring-red-300' : ''}">
-                    <div>
-                        <span class="font-bold">LOTTO ${g.lotto}</span><br>
-                        <small class="text-gray-500">Scad: ${g.scadenza}</small>
-                    </div>
-                    <span class="font-bold text-red-700">${g.quantita} pedane</span>
-                </div>
-            `).join('');
-        }
+    cont.innerHTML = lotti.map(g => `
+        <div onclick="selezionaLottoUscita('${g.id}')" id="lotto-row-${g.id}"
+             class="bg-gray-50 p-3 rounded-lg flex justify-between items-center border cursor-pointer ${lottoSelezionatoUscita === g.id ? 'border-red-600 bg-red-50 ring-2 ring-red-300' : ''}">
+            <div>
+                <span class="font-bold">LOTTO ${g.lotto}</span><br>
+                <small class="text-gray-500">Scad: ${g.scadenza}</small>
+            </div>
+            <span class="font-bold text-red-700">${g.quantita} pedane</span>
+        </div>
+    `).join('');
+}
 
         window.selezionaLottoUscita = (id) => {
             const g = giacenze.find(x => x.id === id);
