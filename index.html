@@ -208,22 +208,23 @@
             confermaCallback = null;
         };
 
-        window.onload = () => {
-            onSnapshot(collection(db, "prodotti"), (snap) => {
-                prodotti = snap.docs.map(d => ({...d.data(), id: d.id}));
-                updateSelectProdotti();
-                renderSetup();
-                renderGiacenze();
-                if (document.getElementById('section-inventario').classList.contains('active')) renderInventario();
-            });
+window.onload = () => {
+    onSnapshot(collection(db, "prodotti"), (snap) => {
+        prodotti = snap.docs.map(d => ({...d.data(), id: d.id}));
+        updateSelectProdotti();
+        renderSetup();
+        renderGiacenze();
+        aggiornaVistaOUT(); // AGGIUNTO: aggiorna la vista appena i prodotti sono pronti
+        if (document.getElementById('section-inventario').classList.contains('active')) renderInventario();
+    });
 
-            onSnapshot(collection(db, "giacenze"), (snap) => {
-                giacenze = snap.docs.map(d => ({...d.data(), id: d.id}));
-                renderGiacenze();
-                aggiornaVistaOUT();
-                if (document.getElementById('section-inventario').classList.contains('active')) renderInventario();
-            });
-        };
+    onSnapshot(collection(db, "giacenze"), (snap) => {
+        giacenze = snap.docs.map(d => ({...d.data(), id: d.id}));
+        renderGiacenze();
+        aggiornaVistaOUT();
+        if (document.getElementById('section-inventario').classList.contains('active')) renderInventario();
+    });
+};
 
 
 // Aggiungi questa funzione
@@ -277,11 +278,15 @@ function formattaData(dataStringa) {
             sel.innerHTML = prodotti.map(p => `<option value="${p.id}">${p.nome}</option>`).join('');
         }
 
-        function aggiornaVistaOUT() {
-            if (tipoMovimento !== 'USCITA') return;
-            const pid = document.getElementById('mov-prodotto').value;
-            const cont = document.getElementById('lista-lotti-prelievo');
-            const lotti = giacenze.filter(g => g.idProdotto === pid && g.quantita > 0);
+function aggiornaVistaOUT() {
+    if (tipoMovimento !== 'USCITA') return;
+    
+    // AGGIUNTA: se non abbiamo ancora scaricato i prodotti, fermati
+    if (prodotti.length === 0) return; 
+
+    const pid = document.getElementById('mov-prodotto').value;
+    const cont = document.getElementById('lista-lotti-prelievo');
+    const lotti = giacenze.filter(g => g.idProdotto === pid && g.quantita > 0);
 
             if (lotti.length === 0) {
                 cont.innerHTML = '<p class="text-center text-gray-500 text-sm py-4">Nessun lotto disponibile</p>';
