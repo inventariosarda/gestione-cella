@@ -52,6 +52,19 @@
             return dataStringa;
         }
 
+        function ordinaLotti(lotti) {
+            return [...lotti].sort((a, b) => {
+                const ga = a.gruppoScadenza || 'Z';
+                const gb = b.gruppoScadenza || 'Z';
+                if (ga !== gb) return ga.localeCompare(gb);
+                return new Date(a.scadenza) - new Date(b.scadenza);
+            });
+        }
+
+        function haGruppoScadenza(lotti) {
+            return lotti.some(g => g.gruppoScadenza);
+        }
+
         function renderGiacenze() {
             const cont = document.getElementById('giacenza-lista');
             if (prodotti.length === 0) {
@@ -60,14 +73,12 @@
             }
 
             const html = prodotti.map(p => {
-                // Filtriamo e ordiniamo per scadenza
-                const lotti = giacenze
-                    .filter(g => g.idProdotto === p.id && g.quantita > 0)
-                    .sort((a, b) => new Date(a.scadenza) - new Date(b.scadenza));
-
+                const lotti = ordinaLotti(giacenze.filter(g => g.idProdotto === p.id && g.quantita > 0));
                 const totale = lotti.reduce((s, g) => s + g.quantita, 0);
                 const badgeClass = totale > 0 ? 'bg-green-600 text-white' : 'bg-gray-400 text-white';
-                
+                const mostraGruppo = haGruppoScadenza(lotti);
+                const cols = mostraGruppo ? 'grid-cols-4' : 'grid-cols-3';
+
                 return `
                     <div class="bg-white p-4 rounded-xl shadow mb-3">
                         <div class="flex justify-between items-center border-b pb-2 mb-2">
@@ -75,15 +86,17 @@
                             <span class="${badgeClass} font-bold px-3 py-1 rounded-lg text-sm">${totale} pedane</span>
                         </div>
                         ${lotti.length > 0 ? `
-                            <div class="grid grid-cols-3 gap-2 text-xs font-bold text-gray-500 border-b pb-1 mb-1">
+                            <div class="grid ${cols} gap-2 text-xs font-bold text-gray-500 border-b pb-1 mb-1">
                                 <span>Lotto</span>
                                 <span>Scadenza</span>
+                                ${mostraGruppo ? '<span>Gruppo</span>' : ''}
                                 <span class="text-right">Pedane</span>
                             </div>
                             ${lotti.map(g => `
-                                <div class="grid grid-cols-3 gap-2 py-2 text-sm border-b border-gray-100 last:border-0">
+                                <div class="grid ${cols} gap-2 py-2 text-sm border-b border-gray-100 last:border-0">
                                     <span class="font-bold">${g.lotto}</span>
                                     <span class="text-gray-600">${formattaData(g.scadenza)}</span>
+                                    ${mostraGruppo ? `<span class="font-bold text-blue-700">${g.gruppoScadenza || '—'}</span>` : ''}
                                     <span class="font-bold text-right">${g.quantita}</span>
                                 </div>
                             `).join('')}

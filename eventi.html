@@ -55,6 +55,16 @@
                     <input type="date" id="modal-evento-scadenza" class="w-full p-2 border rounded-lg text-sm">
                 </div>
                 <div>
+                    <label class="block text-xs font-semibold text-gray-600 mb-1">Gruppo scadenza <span class="font-normal text-gray-400">(opzionale)</span></label>
+                    <select id="modal-evento-gruppo-scadenza" class="w-full p-2 border rounded-lg text-sm bg-white">
+                        <option value="">— Nessuno —</option>
+                        <option value="A">A</option>
+                        <option value="B">B</option>
+                        <option value="C">C</option>
+                        <option value="D">D</option>
+                    </select>
+                </div>
+                <div>
                     <label class="block text-xs font-semibold text-gray-600 mb-1">Pedane</label>
                     <input type="number" id="modal-evento-quantita" min="0" class="w-full p-2 border rounded-lg text-sm font-bold text-center">
                 </div>
@@ -75,12 +85,17 @@
     </div>
 
     <main class="flex-grow p-4 max-w-md mx-auto w-full">
+        <section class="bg-white p-4 rounded-xl shadow mb-4">
+            <h2 class="text-sm font-bold text-blue-900 mb-1">📱 Dispositivi</h2>
+            <p class="text-xs text-gray-500 mb-3">Assegna un nome personalizzato ai dispositivi che hanno registrato azioni</p>
+            <div id="dispositivi-lista" class="space-y-2"></div>
+        </section>
         <div id="eventi-lista" class="space-y-3"></div>
     </main>
 
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-        import { getFirestore, collection, onSnapshot, query, doc, updateDoc, deleteDoc, addDoc, orderBy } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+        import { getFirestore, collection, onSnapshot, query, doc, updateDoc, deleteDoc, addDoc, setDoc, orderBy, deleteField } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
         const firebaseConfig = {
             apiKey: "AIzaSyB0daUTnfyhdyWPpkmFoPcyAguyZq63NE0",
@@ -98,8 +113,9 @@
         let prodotti = [];
         let giacenze = [];
         let eventi = [];
+        let dispositivi = {};
 
-        function trovaGiacenza({ giacenzaId, idProdotto, lotto, scadenza }) {
+        function trovaGiacenza({ giacenzaId, idProdotto, lotto, scadenza, gruppoScadenza }) {
             if (giacenzaId) {
                 const g = giacenze.find(x => x.id === giacenzaId);
                 if (g) return g;
@@ -108,9 +124,54 @@
             return giacenze.find(g =>
                 g.idProdotto === idProdotto &&
                 g.lotto === lotto &&
-                g.scadenza === scadenza
+                g.scadenza === scadenza &&
+                (g.gruppoScadenza || null) === (gruppoScadenza || null)
             ) || null;
         }
+
+        function nomeDispositivo(deviceId) {
+            if (!deviceId) return '—';
+            const d = dispositivi[deviceId];
+            return (d && d.nome) ? d.nome : deviceId;
+        }
+
+        function renderDispositivi() {
+            const cont = document.getElementById('dispositivi-lista');
+            const deviceIds = [...new Set(eventi.map(e => e.deviceId).filter(Boolean))].sort();
+
+            if (deviceIds.length === 0) {
+                cont.innerHTML = '<p class="text-sm text-gray-400 py-2">Nessun dispositivo rilevato</p>';
+                return;
+            }
+
+            cont.innerHTML = deviceIds.map(id => {
+                const nome = dispositivi[id]?.nome || '';
+                return `
+                    <div class="flex items-center gap-2 py-2 border-b border-gray-100 last:border-0">
+                        <span class="text-xs font-mono text-gray-500 w-16 flex-shrink-0">${id}</span>
+                        <input type="text"
+                               id="device-nome-${id.replace(/[^a-zA-Z0-9]/g, '_')}"
+                               value="${nome}"
+                               placeholder="Nome personalizzato"
+                               onblur="salvaNomeDispositivo('${id}', this.value)"
+                               class="flex-1 p-2 border rounded-lg text-sm">
+                    </div>`;
+            }).join('');
+        }
+
+        window.salvaNomeDispositivo = async (deviceId, nome) => {
+            nome = nome.trim();
+            try {
+                if (nome) {
+                    await setDoc(doc(db, "dispositivi", deviceId), { deviceId, nome });
+                } else if (dispositivi[deviceId]) {
+                    await deleteDoc(doc(db, "dispositivi", deviceId));
+                }
+            } catch (err) {
+                mostraMessaggio('Errore nel salvataggio del nome dispositivo');
+                console.error(err);
+            }
+        };
 
         function aggiornaGiacenzaLocale(id, dati) {
             const idx = giacenze.findIndex(g => g.id === id);
@@ -138,6 +199,7 @@
         async function sincronizzaGiacenzaInventario(eOrig, eNuovo) {
             const lotto = eNuovo.lotto || eOrig.lotto;
             const scadenza = eNuovo.scadenza || eOrig.scadenza;
+            const gruppoScadenza = eNuovo.gruppoScadenza !== undefined ? (eNuovo.gruppoScadenza || null) : (eOrig.gruppoScadenza || null);
             const quantita = eNuovo.quantita ?? eOrig.quantita ?? 0;
             const idProdotto = eNuovo.idProdotto || eOrig.idProdotto;
             const nome = eNuovo.nomeProdotto || eOrig.nomeProdotto;
@@ -158,7 +220,8 @@
                     x.id !== g.id &&
                     x.idProdotto === idProdotto &&
                     x.lotto === lotto &&
-                    x.scadenza === scadenza
+                    x.scadenza === scadenza &&
+                    (x.gruppoScadenza || null) === gruppoScadenza
                 );
                 if (altro) {
                     await updateDoc(doc(db, "giacenze", altro.id), { quantita: altro.quantita + quantita, nome });
@@ -167,21 +230,26 @@
                     aggiornaGiacenzaLocale(g.id, null);
                     return altro.id;
                 }
-                await updateDoc(doc(db, "giacenze", g.id), { lotto, scadenza, quantita, idProdotto, nome });
-                aggiornaGiacenzaLocale(g.id, { lotto, scadenza, quantita, idProdotto, nome });
+                const update = { lotto, scadenza, quantita, idProdotto, nome };
+                if (gruppoScadenza) update.gruppoScadenza = gruppoScadenza;
+                else update.gruppoScadenza = deleteField();
+                await updateDoc(doc(db, "giacenze", g.id), update);
+                aggiornaGiacenzaLocale(g.id, update);
                 return g.id;
             }
 
             if (quantita > 0) {
-                const esistente = trovaGiacenza({ idProdotto, lotto, scadenza });
+                const esistente = trovaGiacenza({ idProdotto, lotto, scadenza, gruppoScadenza });
                 if (esistente) {
                     const nuova = esistente.quantita + quantita;
                     await updateDoc(doc(db, "giacenze", esistente.id), { quantita: nuova, nome });
                     aggiornaGiacenzaLocale(esistente.id, { quantita: nuova, nome });
                     return esistente.id;
                 }
-                const ref = await addDoc(collection(db, "giacenze"), { idProdotto, nome, lotto, scadenza, quantita });
-                giacenze.push({ id: ref.id, idProdotto, nome, lotto, scadenza, quantita });
+                const dati = { idProdotto, nome, lotto, scadenza, quantita };
+                if (gruppoScadenza) dati.gruppoScadenza = gruppoScadenza;
+                const ref = await addDoc(collection(db, "giacenze"), dati);
+                giacenze.push({ id: ref.id, ...dati });
                 return ref.id;
             }
             return null;
@@ -212,10 +280,13 @@
             if (!eNuovo.quantita || !eNuovo.lotto || !eNuovo.scadenza || !eNuovo.idProdotto) return null;
 
             const gLinkedAfter = eOrig.giacenzaId ? giacenze.find(x => x.id === eOrig.giacenzaId) : null;
+            const gruppoOrig = eOrig.gruppoScadenza || null;
+            const gruppoNuovo = eNuovo.gruppoScadenza || null;
             const stesseChiavi =
                 eOrig.lotto === eNuovo.lotto &&
                 eOrig.scadenza === eNuovo.scadenza &&
-                eOrig.idProdotto === eNuovo.idProdotto;
+                eOrig.idProdotto === eNuovo.idProdotto &&
+                gruppoOrig === gruppoNuovo;
 
             let gTarget = null;
 
@@ -242,6 +313,8 @@
                     idProdotto: eNuovo.idProdotto,
                     nome: eNuovo.nomeProdotto
                 };
+                if (gruppoNuovo) update.gruppoScadenza = gruppoNuovo;
+                else update.gruppoScadenza = deleteField();
 
                 if (q <= 0) {
                     await deleteDoc(doc(db, "giacenze", gTarget.id));
@@ -260,7 +333,8 @@
                 nome: eNuovo.nomeProdotto,
                 lotto: eNuovo.lotto,
                 scadenza: eNuovo.scadenza,
-                quantita: eNuovo.quantita
+                quantita: eNuovo.quantita,
+                ...(gruppoNuovo ? { gruppoScadenza: gruppoNuovo } : {})
             });
             giacenze.push({
                 id: ref.id,
@@ -268,7 +342,8 @@
                 nome: eNuovo.nomeProdotto,
                 lotto: eNuovo.lotto,
                 scadenza: eNuovo.scadenza,
-                quantita: eNuovo.quantita
+                quantita: eNuovo.quantita,
+                ...(gruppoNuovo ? { gruppoScadenza: gruppoNuovo } : {})
             });
             return ref.id;
         }
@@ -294,10 +369,10 @@
                         <span class="text-xs text-gray-500">${formattaDataOra(e.timestamp)}</span>
                     </div>
                     <p class="font-bold text-sm">${e.nomeProdotto || '—'}</p>
-                    ${e.lotto ? `<p class="text-sm"><span class="font-bold">LOTTO ${e.lotto}</span>${e.scadenza ? ` · Scad: ${e.scadenza}` : ''}</p>` : ''}
+                    ${e.lotto ? `<p class="text-sm"><span class="font-bold">LOTTO ${e.lotto}</span>${e.scadenza ? ` · Scad: ${e.scadenza}` : ''}${e.gruppoScadenza ? ` · Gruppo <span class="font-bold text-blue-700">${e.gruppoScadenza}</span>` : ''}</p>` : ''}
                     ${e.quantita ? `<p class="text-sm font-bold">${e.quantita} pedane</p>` : ''}
                     ${e.nota ? `<p class="text-xs text-gray-500 mt-1">${e.nota}</p>` : ''}
-                    ${e.deviceId ? `<p class="text-xs text-gray-400 mt-1">Dispositivo: ${e.deviceId}</p>` : ''}
+                    ${e.deviceId ? `<p class="text-xs text-gray-400 mt-1">Dispositivo: ${nomeDispositivo(e.deviceId)}</p>` : ''}
                     <button onclick="apriModalModificaEvento('${e.id}')" class="mt-2 text-blue-600 text-xs font-bold">Modifica</button>
                 </div>
             `).join('');
@@ -322,10 +397,11 @@
 
             document.getElementById('modal-evento-lotto').value = e.lotto || '';
             document.getElementById('modal-evento-scadenza').value = e.scadenza || '';
+            document.getElementById('modal-evento-gruppo-scadenza').value = e.gruppoScadenza || '';
             document.getElementById('modal-evento-quantita').value = e.quantita ?? '';
             document.getElementById('modal-evento-nota').value = e.nota || '';
             document.getElementById('modal-evento-timestamp').innerText = formattaDataOra(e.timestamp);
-            document.getElementById('modal-evento-device').innerText = e.deviceId || '—';
+            document.getElementById('modal-evento-device').innerText = nomeDispositivo(e.deviceId);
             document.getElementById('modal-modifica-evento').classList.remove('hidden');
         };
 
@@ -343,6 +419,7 @@
             const prodotto = prodotti.find(p => p.id === pid);
             const lotto = document.getElementById('modal-evento-lotto').value.trim().toUpperCase();
             const scadenza = document.getElementById('modal-evento-scadenza').value;
+            const gruppoScadenza = document.getElementById('modal-evento-gruppo-scadenza').value || null;
             const quantita = parseInt(document.getElementById('modal-evento-quantita').value) || 0;
             const nota = document.getElementById('modal-evento-nota').value.trim();
 
@@ -351,7 +428,8 @@
                 lotto: lotto || null,
                 scadenza: scadenza || null,
                 quantita,
-                nota: nota || null
+                nota: nota || null,
+                gruppoScadenza
             };
 
             if (prodotto) {
@@ -362,20 +440,32 @@
                 if (e.idProdotto) datiNuovi.idProdotto = e.idProdotto;
             }
 
+            const datiFirestore = { ...datiNuovi };
+            if (gruppoScadenza) datiFirestore.gruppoScadenza = gruppoScadenza;
+            else datiFirestore.gruppoScadenza = deleteField();
+
             try {
                 const eventoFinale = { ...e, ...datiNuovi };
                 let nuovoGiacenzaId = e.giacenzaId || null;
 
                 if (e.tipo === 'ENTRATA' || e.tipo === 'USCITA' || datiNuovi.tipo === 'ENTRATA' || datiNuovi.tipo === 'USCITA') {
                     nuovoGiacenzaId = await sincronizzaEventoMovimento(e, eventoFinale);
-                    if (nuovoGiacenzaId) datiNuovi.giacenzaId = nuovoGiacenzaId;
-                    else if (eventoFinale.tipo !== 'ENTRATA' && eventoFinale.tipo !== 'USCITA') datiNuovi.giacenzaId = null;
+                    if (nuovoGiacenzaId) {
+                        datiNuovi.giacenzaId = nuovoGiacenzaId;
+                        datiFirestore.giacenzaId = nuovoGiacenzaId;
+                    } else if (eventoFinale.tipo !== 'ENTRATA' && eventoFinale.tipo !== 'USCITA') {
+                        datiNuovi.giacenzaId = null;
+                        datiFirestore.giacenzaId = null;
+                    }
                 } else if (e.tipo === 'INVENTARIO' && (e.lotto || lotto) && (e.idProdotto || pid)) {
                     nuovoGiacenzaId = await sincronizzaGiacenzaInventario(e, eventoFinale);
-                    if (nuovoGiacenzaId) datiNuovi.giacenzaId = nuovoGiacenzaId;
+                    if (nuovoGiacenzaId) {
+                        datiNuovi.giacenzaId = nuovoGiacenzaId;
+                        datiFirestore.giacenzaId = nuovoGiacenzaId;
+                    }
                 }
 
-                await updateDoc(doc(db, "eventi", id), datiNuovi);
+                await updateDoc(doc(db, "eventi", id), datiFirestore);
                 chiudiModalEvento();
                 mostraMessaggio('Evento e giacenze aggiornati');
             } catch (err) {
@@ -394,6 +484,16 @@
 
         onSnapshot(query(collection(db, "eventi"), orderBy("timestamp", "desc")), (snap) => {
             eventi = snap.docs.map(d => ({...d.data(), id: d.id}));
+            renderDispositivi();
+            renderEventi();
+        });
+
+        onSnapshot(collection(db, "dispositivi"), (snap) => {
+            dispositivi = {};
+            snap.docs.forEach(d => {
+                dispositivi[d.id] = { ...d.data(), id: d.id };
+            });
+            renderDispositivi();
             renderEventi();
         });
     </script>
