@@ -22,10 +22,12 @@
   <header class="bg-blue-800 text-white p-4 shadow-md sticky top-0 z-50 flex justify-between items-center">
    <div>
     <h1 data-template-id="app-title" class="canva-text text-xl font-bold tracking-wide" style="color: rgb(255, 255, 255); font-weight: 700; font-style: normal; font-size: 20px;">📦 Gestione Pedane</h1>
-    <div class="flex items-center gap-2 mt-0.5"><span id="connection-status" class="text-xs opacity-80">Connesso al Cloud</span> <span id="sync-badge" class="hidden text-xs bg-yellow-400 text-yellow-900 font-bold px-2 py-0.5 rounded-full">⏳ In attesa</span>
+    <div class="flex items-center gap-2 mt-0.5">
+     <span id="connection-status" class="text-xs opacity-80">Connesso al Cloud</span> <span id="sync-badge" class="hidden text-xs bg-yellow-400 text-yellow-900 font-bold px-2 py-0.5 rounded-full">⏳ In attesa</span>
     </div>
    </div>
-   <div class="flex gap-2"><a href="giacenze.html" target="_blank" rel="noopener noreferrer" class="text-xs bg-white bg-opacity-20 px-2 py-1 rounded-lg font-bold">📊</a> <a href="eventi.html" target="_blank" rel="noopener noreferrer" class="text-xs bg-white bg-opacity-20 px-2 py-1 rounded-lg font-bold">📋</a>
+   <div class="flex gap-2">
+    <a href="giacenze.html" target="_blank" rel="noopener noreferrer" class="text-xs bg-white bg-opacity-20 px-2 py-1 rounded-lg font-bold">📊</a> <a href="eventi.html" target="_blank" rel="noopener noreferrer" class="text-xs bg-white bg-opacity-20 px-2 py-1 rounded-lg font-bold">📋</a>
    </div>
   </header><!-- Modal prelievo OUT -->
   <div id="modal-uscita-lotto" class="fixed inset-0 z-[60] hidden flex items-center justify-center p-4 bg-black bg-opacity-50">
@@ -33,7 +35,8 @@
     <h3 data-template-id="modal-uscita-title" class="canva-text text-lg font-bold text-blue-900 mb-1" style="color: rgb(30, 58, 138); font-weight: 700; font-style: normal; font-size: 18px;">Prelievo pedane</h3>
     <p id="modal-uscita-lotto-info" class="text-sm text-gray-600 mb-1"></p>
     <p id="modal-uscita-disponibili" class="text-sm font-bold text-green-700 mb-4"></p><label data-template-id="modal-uscita-label" class="canva-text block text-sm font-semibold text-gray-700 mb-1" style="color: rgb(55, 65, 81); font-weight: 600; font-style: normal; font-size: 14px;">Numero pedane da prelevare</label> <input type="number" id="modal-uscita-quantita" value="1" min="1" class="w-full p-3 border rounded-lg text-center font-bold mb-4">
-    <div class="grid grid-cols-2 gap-2"><button onclick="chiudiModalUscita()" data-template-id="modal-uscita-annulla" class="canva-button py-3 rounded-lg font-bold border-2 border-gray-300 text-gray-600" style="color: rgb(75, 85, 99); font-weight: 400; font-style: normal; font-size: 16px;">Annulla</button> <button onclick="confermaUscita()" data-template-id="modal-uscita-conferma" class="canva-button py-3 rounded-lg font-bold bg-red-600 text-white" style="background: rgb(220, 38, 38); color: rgb(255, 255, 255); font-weight: 400; font-style: normal; font-size: 16px;">Conferma</button>
+    <div class="grid grid-cols-2 gap-2">
+     <button onclick="chiudiModalUscita()" data-template-id="modal-uscita-annulla" class="canva-button py-3 rounded-lg font-bold border-2 border-gray-300 text-gray-600" style="color: rgb(75, 85, 99); font-weight: 400; font-style: normal; font-size: 16px;">Annulla</button> <button onclick="confermaUscita()" data-template-id="modal-uscita-conferma" class="canva-button py-3 rounded-lg font-bold bg-red-600 text-white" style="background: rgb(220, 38, 38); color: rgb(255, 255, 255); font-weight: 400; font-style: normal; font-size: 16px;">Conferma</button>
     </div>
    </div>
   </div><!-- Modal messaggio -->
@@ -45,14 +48,16 @@
   <div id="modal-conferma" class="fixed inset-0 z-[70] hidden flex items-center justify-center p-4 bg-black bg-opacity-50">
    <div class="bg-white rounded-xl shadow-2xl w-full max-w-sm p-5">
     <p id="modal-conferma-testo" class="text-sm text-gray-700 mb-4"></p>
-    <div class="grid grid-cols-2 gap-2"><button onclick="chiudiModalConferma(false)" data-template-id="modal-conferma-annulla" class="canva-button py-3 rounded-lg font-bold border-2 border-gray-300 text-gray-600" style="color: rgb(75, 85, 99); font-weight: 400; font-style: normal; font-size: 16px;">Annulla</button> <button onclick="chiudiModalConferma(true)" data-template-id="modal-conferma-ok" class="canva-button py-3 rounded-lg font-bold bg-red-600 text-white" style="background: rgb(220, 38, 38); color: rgb(255, 255, 255); font-weight: 400; font-style: normal; font-size: 16px;">Conferma</button>
+    <div class="grid grid-cols-2 gap-2">
+     <button onclick="chiudiModalConferma(false)" data-template-id="modal-conferma-annulla" class="canva-button py-3 rounded-lg font-bold border-2 border-gray-300 text-gray-600" style="color: rgb(75, 85, 99); font-weight: 400; font-style: normal; font-size: 16px;">Annulla</button> <button onclick="chiudiModalConferma(true)" data-template-id="modal-conferma-ok" class="canva-button py-3 rounded-lg font-bold bg-red-600 text-white" style="background: rgb(220, 38, 38); color: rgb(255, 255, 255); font-weight: 400; font-style: normal; font-size: 16px;">Conferma</button>
     </div>
    </div>
   </div><!-- Modal modifica prodotto setup -->
   <div id="modal-modifica-prodotto" class="fixed inset-0 z-[60] hidden flex items-center justify-center p-4 bg-black bg-opacity-50">
    <div class="bg-white rounded-xl shadow-2xl w-full max-w-sm p-5">
     <h3 data-template-id="modal-modifica-title" class="canva-text text-lg font-bold text-blue-900 mb-4" style="color: rgb(30, 58, 138); font-weight: 700; font-style: normal; font-size: 18px;">Modifica articolo</h3><input type="hidden" id="modal-prodotto-id"> <input type="text" id="modal-prodotto-nome" class="w-full p-3 border rounded-lg uppercase font-bold mb-4" placeholder="Nome articolo">
-    <div class="grid grid-cols-2 gap-2"><button onclick="chiudiModalModificaProdotto()" data-template-id="modal-modifica-annulla" class="canva-button py-3 rounded-lg font-bold border-2 border-gray-300 text-gray-600" style="color: rgb(75, 85, 99); font-weight: 400; font-style: normal; font-size: 16px;">Annulla</button> <button onclick="salvaModificaProdotto()" data-template-id="modal-modifica-salva" class="canva-button py-3 rounded-lg font-bold bg-blue-600 text-white" style="background: rgb(37, 99, 235); color: rgb(255, 255, 255); font-weight: 400; font-style: normal; font-size: 16px;">Salva</button>
+    <div class="grid grid-cols-2 gap-2">
+     <button onclick="chiudiModalModificaProdotto()" data-template-id="modal-modifica-annulla" class="canva-button py-3 rounded-lg font-bold border-2 border-gray-300 text-gray-600" style="color: rgb(75, 85, 99); font-weight: 400; font-style: normal; font-size: 16px;">Annulla</button> <button onclick="salvaModificaProdotto()" data-template-id="modal-modifica-salva" class="canva-button py-3 rounded-lg font-bold bg-blue-600 text-white" style="background: rgb(37, 99, 235); color: rgb(255, 255, 255); font-weight: 400; font-style: normal; font-size: 16px;">Salva</button>
     </div>
    </div>
   </div><!-- Modal modifica lotto inventario -->
@@ -61,24 +66,31 @@
     <h3 data-template-id="modal-inv-title" class="canva-text text-lg font-bold text-blue-900 mb-1" style="color: rgb(30, 58, 138); font-weight: 700; font-style: normal; font-size: 18px;">Modifica lotto</h3>
     <p id="modal-inv-prodotto-nome" class="text-sm text-gray-600 mb-4"></p><input type="hidden" id="modal-inv-giacenza-id"> <input type="hidden" id="modal-inv-prodotto-id">
     <div class="space-y-3">
-     <div><label data-template-id="inv-label-lotto" class="canva-text block text-xs font-semibold text-gray-600 mb-1" style="color: rgb(75, 85, 99); font-weight: 600; font-style: normal; font-size: 12px;">Lotto</label> <input type="text" id="modal-inv-lotto" class="w-full p-3 border rounded-lg text-sm uppercase font-bold" placeholder="Lotto">
+     <div>
+      <label data-template-id="inv-label-lotto" class="canva-text block text-xs font-semibold text-gray-600 mb-1" style="color: rgb(75, 85, 99); font-weight: 600; font-style: normal; font-size: 12px;">Lotto</label> <input type="text" id="modal-inv-lotto" class="w-full p-3 border rounded-lg text-sm uppercase font-bold" placeholder="Lotto">
      </div>
-     <div><label data-template-id="inv-label-scadenza" class="canva-text block text-xs font-semibold text-gray-600 mb-1" style="color: rgb(75, 85, 99); font-weight: 600; font-style: normal; font-size: 12px;">Scadenza</label> <input type="date" id="modal-inv-scadenza" class="w-full p-3 border rounded-lg text-sm">
+     <div>
+      <label data-template-id="inv-label-scadenza" class="canva-text block text-xs font-semibold text-gray-600 mb-1" style="color: rgb(75, 85, 99); font-weight: 600; font-style: normal; font-size: 12px;">Scadenza</label> <input type="date" id="modal-inv-scadenza" class="w-full p-3 border rounded-lg text-sm">
      </div>
-     <div><label data-template-id="inv-label-pedane" class="canva-text block text-xs font-semibold text-gray-600 mb-1" style="color: rgb(75, 85, 99); font-weight: 600; font-style: normal; font-size: 12px;">Pedane</label> <input type="number" id="modal-inv-quantita" min="0" class="w-full p-3 border rounded-lg text-sm font-bold text-center">
+     <div>
+      <label data-template-id="inv-label-pedane" class="canva-text block text-xs font-semibold text-gray-600 mb-1" style="color: rgb(75, 85, 99); font-weight: 600; font-style: normal; font-size: 12px;">Pedane</label> <input type="number" id="modal-inv-quantita" min="0" class="w-full p-3 border rounded-lg text-sm font-bold text-center">
      </div>
     </div>
-    <div class="grid grid-cols-2 gap-2 mt-4"><button onclick="chiudiModalInventario()" data-template-id="modal-inv-annulla" class="canva-button py-3 rounded-lg font-bold border-2 border-gray-300 text-gray-600" style="color: rgb(75, 85, 99); font-weight: 400; font-style: normal; font-size: 16px;">Annulla</button> <button onclick="salvaInventarioLotto()" data-template-id="modal-inv-salva" class="canva-button py-3 rounded-lg font-bold bg-blue-600 text-white" style="background: rgb(37, 99, 235); color: rgb(255, 255, 255); font-weight: 400; font-style: normal; font-size: 16px;">Salva</button>
+    <div class="grid grid-cols-2 gap-2 mt-4">
+     <button onclick="chiudiModalInventario()" data-template-id="modal-inv-annulla" class="canva-button py-3 rounded-lg font-bold border-2 border-gray-300 text-gray-600" style="color: rgb(75, 85, 99); font-weight: 400; font-style: normal; font-size: 16px;">Annulla</button> <button onclick="salvaInventarioLotto()" data-template-id="modal-inv-salva" class="canva-button py-3 rounded-lg font-bold bg-blue-600 text-white" style="background: rgb(37, 99, 235); color: rgb(255, 255, 255); font-weight: 400; font-style: normal; font-size: 16px;">Salva</button>
     </div>
    </div>
   </div>
   <main class="flex-grow p-4 max-w-md mx-auto w-full">
    <section id="section-movimentazione" class="tab-content active">
     <h2 data-template-id="section-mov-title" class="canva-text text-lg font-bold mb-4 text-blue-900 border-b pb-2" style="color: rgb(30, 58, 138); font-weight: 700; font-style: normal; font-size: 18px;">🔄 Movimentazione</h2>
-    <div class="bg-white p-4 rounded-xl shadow space-y-4"><select id="mov-prodotto" onchange="aggiornaVistaOUT()" class="w-full p-3 border rounded-lg bg-white"></select>
-     <div class="grid grid-cols-2 gap-2"><button id="btn-tipo-entrata" onclick="setTipoMovimento('ENTRATA')" class="py-3 rounded-lg font-bold border-2 border-green-600 bg-green-50 text-green-700">📥 IN</button> <button id="btn-tipo-uscita" onclick="setTipoMovimento('USCITA')" class="py-3 rounded-lg font-bold border-2 border-gray-300 text-gray-500">📤 OUT</button>
+    <div class="bg-white p-4 rounded-xl shadow space-y-4">
+     <select id="mov-prodotto" onchange="aggiornaVistaOUT()" class="w-full p-3 border rounded-lg bg-white"></select>
+     <div class="grid grid-cols-2 gap-2">
+      <button id="btn-tipo-entrata" onclick="setTipoMovimento('ENTRATA')" class="py-3 rounded-lg font-bold border-2 border-green-600 bg-green-50 text-green-700">📥 IN</button> <button id="btn-tipo-uscita" onclick="setTipoMovimento('USCITA')" class="py-3 rounded-lg font-bold border-2 border-gray-300 text-gray-500">📤 OUT</button>
      </div>
-     <div id="container-carico-manuale" class="space-y-3"><input type="number" id="mov-quantita" value="1" min="1" class="w-full p-3 border rounded-lg text-center font-bold"> <input type="text" id="mov-lotto" placeholder="Lotto" class="w-full p-3 border rounded-lg uppercase"> <input type="date" id="mov-scadenza" class="w-full p-3 border rounded-lg"> <button onclick="registraMovimento()" data-template-id="btn-registra" class="canva-button w-full bg-green-600 text-white py-4 rounded-xl font-bold" style="background: rgb(22, 163, 74); color: rgb(255, 255, 255); font-weight: 700; font-style: normal; font-size: 16px;">REGISTRA MOVIMENTO</button>
+     <div id="container-carico-manuale" class="space-y-3">
+      <input type="number" id="mov-quantita" value="1" min="1" class="w-full p-3 border rounded-lg text-center font-bold"> <input type="text" id="mov-lotto" placeholder="Lotto" class="w-full p-3 border rounded-lg uppercase"> <input type="date" id="mov-scadenza" class="w-full p-3 border rounded-lg"> <button onclick="registraMovimento()" data-template-id="btn-registra" class="canva-button w-full bg-green-600 text-white py-4 rounded-xl font-bold" style="background: rgb(22, 163, 74); color: rgb(255, 255, 255); font-weight: 700; font-style: normal; font-size: 16px;">REGISTRA MOVIMENTO</button>
      </div>
      <div id="container-scarico-lotti" class="space-y-3 hidden">
       <p data-template-id="scarico-label" class="canva-text text-sm font-semibold text-gray-600 text-center" style="color: rgb(75, 85, 99); font-weight: 600; font-style: normal; font-size: 14px;">Seleziona lotto da scaricare:</p>
@@ -97,12 +109,14 @@
    </section>
    <section id="section-setup" class="tab-content">
     <h2 data-template-id="section-setup-title" class="canva-text text-lg font-bold mb-4" style="font-weight: 700; font-style: normal; font-size: 18px;">⚙️ Setup</h2>
-    <div class="bg-white p-4 rounded-xl shadow mb-4"><input type="text" id="setup-nome-prodotto" placeholder="Nome Articolo" class="w-full p-3 border rounded-lg mb-2"> <button onclick="aggiungiProdotto()" data-template-id="btn-aggiungi-prodotto" class="canva-button w-full bg-green-600 text-white py-3 rounded-lg font-bold" style="background: rgb(22, 163, 74); color: rgb(255, 255, 255); font-weight: 700; font-style: normal; font-size: 16px;">Aggiungi</button>
+    <div class="bg-white p-4 rounded-xl shadow mb-4">
+     <input type="text" id="setup-nome-prodotto" placeholder="Nome Articolo" class="w-full p-3 border rounded-lg mb-2"> <button onclick="aggiungiProdotto()" data-template-id="btn-aggiungi-prodotto" class="canva-button w-full bg-green-600 text-white py-3 rounded-lg font-bold" style="background: rgb(22, 163, 74); color: rgb(255, 255, 255); font-weight: 700; font-style: normal; font-size: 16px;">Aggiungi</button>
     </div>
     <ul id="setup-lista-prodotti" class="bg-white rounded-xl shadow p-4 divide-y"></ul>
    </section>
   </main>
-  <nav class="fixed bottom-0 left-0 right-0 bg-white border-t flex justify-around py-2 shadow-lg z-50"><button onclick="switchTab('movimentazione')" id="nav-movimentazione" data-template-id="nav-btn-movimento" class="canva-button flex flex-col items-center active-tab py-1 w-full text-xs font-bold" style="font-weight: 700; font-style: normal; font-size: 12px;">MOVIMENTO</button> <button onclick="switchTab('giacenza')" id="nav-giacenza" data-template-id="nav-btn-giacenze" class="canva-button flex flex-col items-center py-1 w-full text-xs font-bold" style="font-weight: 700; font-style: normal; font-size: 12px;">GIACENZE</button> <button onclick="switchTab('inventario')" id="nav-inventario" data-template-id="nav-btn-inventario" class="canva-button flex flex-col items-center py-1 w-full text-xs font-bold" style="font-weight: 700; font-style: normal; font-size: 12px;">INVENTARIO</button> <button onclick="switchTab('setup')" id="nav-setup" data-template-id="nav-btn-setup" class="canva-button flex flex-col items-center py-1 w-full text-xs font-bold" style="font-weight: 700; font-style: normal; font-size: 12px;">Setup</button>
+  <nav class="fixed bottom-0 left-0 right-0 bg-white border-t flex justify-around py-2 shadow-lg z-50">
+   <button onclick="switchTab('movimentazione')" id="nav-movimentazione" data-template-id="nav-btn-movimento" class="canva-button flex flex-col items-center active-tab py-1 w-full text-xs font-bold" style="font-weight: 700; font-style: normal; font-size: 12px;">MOVIMENTO</button> <button onclick="switchTab('giacenza')" id="nav-giacenza" data-template-id="nav-btn-giacenze" class="canva-button flex flex-col items-center py-1 w-full text-xs font-bold" style="font-weight: 700; font-style: normal; font-size: 12px;">GIACENZE</button> <button onclick="switchTab('inventario')" id="nav-inventario" data-template-id="nav-btn-inventario" class="canva-button flex flex-col items-center py-1 w-full text-xs font-bold" style="font-weight: 700; font-style: normal; font-size: 12px;">INVENTARIO</button> <button onclick="switchTab('setup')" id="nav-setup" data-template-id="nav-btn-setup" class="canva-button flex flex-col items-center py-1 w-full text-xs font-bold" style="font-weight: 700; font-style: normal; font-size: 12px;">Setup</button>
   </nav>
   <script type="module">
         // ── Firebase imports ──────────────────────────────────────────────────────
