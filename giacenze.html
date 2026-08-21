@@ -53,7 +53,13 @@
         }
 
         function ordinaLotti(lotti) {
-            return [...lotti].sort((a, b) => new Date(a.scadenza) - new Date(b.scadenza));
+            return [...lotti].sort((a, b) => {
+                const diffScadenza = new Date(a.scadenza) - new Date(b.scadenza);
+                if (diffScadenza !== 0) return diffScadenza;
+                const ga = a.gruppoScadenza || 'Z';
+                const gb = b.gruppoScadenza || 'Z';
+                return ga.localeCompare(gb);
+            });
         }
 
         function haGruppoScadenza(lotti) {
