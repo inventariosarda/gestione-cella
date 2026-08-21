@@ -447,7 +447,7 @@ function aggiornaVistaOUT() {
                 await updateDoc(doc(db, "giacenze", g.id), { quantita: nuovaQta });
             }
 
-            await registraEvento({
+            const eventoUscita = {
                 tipo: 'USCITA',
                 idProdotto: g.idProdotto,
                 nomeProdotto: g.nome,
@@ -455,7 +455,9 @@ function aggiornaVistaOUT() {
                 scadenza: g.scadenza,
                 quantita: qta,
                 giacenzaId: g.id
-            });
+            };
+            if (g.gruppoScadenza) eventoUscita.gruppoScadenza = g.gruppoScadenza;
+            await registraEvento(eventoUscita);
 
             chiudiModalUscita();
             mostraNotifica(`Uscite ${qta} pedane`);

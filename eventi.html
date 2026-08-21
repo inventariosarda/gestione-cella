@@ -144,6 +144,20 @@
             document.getElementById('modal-messaggio').classList.add('hidden');
         };
 
+        function formattaData(dataStringa) {
+            if (!dataStringa) return '';
+            const soloData = dataStringa.toString().split('T')[0];
+            const parti = soloData.split('-');
+            if (parti.length === 3 && parti[0].length === 4) {
+                return `${parti[2]}/${parti[1]}/${parti[0]}`;
+            }
+            return dataStringa;
+        }
+
+        function gruppoEvento(e) {
+            return e.gruppoScadenza || trovaGiacenza(e)?.gruppoScadenza || null;
+        }
+
         function formattaDataOra(ts) {
             if (!ts) return '-';
             const d = ts.toDate ? ts.toDate() : new Date(ts);
@@ -323,7 +337,7 @@
                         <span class="text-xs text-gray-500">${formattaDataOra(e.timestamp)}</span>
                     </div>
                     <p class="font-bold text-sm">${e.nomeProdotto || '—'}</p>
-                    ${e.lotto ? `<p class="text-sm"><span class="font-bold">LOTTO ${e.lotto}</span>${e.scadenza ? ` · Scad: ${e.scadenza}` : ''}${e.gruppoScadenza ? ` · Gruppo <span class="font-bold text-blue-700">${e.gruppoScadenza}</span>` : ''}</p>` : ''}
+                    ${e.lotto ? `<p class="text-sm"><span class="font-bold">LOTTO ${e.lotto}</span>${e.scadenza ? ` · Scad: ${formattaData(e.scadenza)}` : ''}${gruppoEvento(e) ? ` · Gruppo <span class="font-bold text-blue-700">${gruppoEvento(e)}</span>` : ''}</p>` : ''}
                     ${e.quantita ? `<p class="text-sm font-bold">${e.quantita} pedane</p>` : ''}
                     ${e.nota ? `<p class="text-xs text-gray-500 mt-1">${e.nota}</p>` : ''}
                     ${(e.operatore || e.deviceId) ? `<p class="text-xs text-gray-400 mt-1">Operatore: ${nomeOperatore(e)}</p>` : ''}
@@ -351,7 +365,7 @@
 
             document.getElementById('modal-evento-lotto').value = e.lotto || '';
             document.getElementById('modal-evento-scadenza').value = e.scadenza || '';
-            document.getElementById('modal-evento-gruppo-scadenza').value = e.gruppoScadenza || '';
+            document.getElementById('modal-evento-gruppo-scadenza').value = gruppoEvento(e) || '';
             document.getElementById('modal-evento-quantita').value = e.quantita ?? '';
             document.getElementById('modal-evento-nota').value = e.nota || '';
             document.getElementById('modal-evento-timestamp').innerText = formattaDataOra(e.timestamp);
