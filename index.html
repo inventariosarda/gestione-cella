@@ -211,7 +211,7 @@ window.attivaNotifichePush = async function() {
         }
 
         // 2. Registra esplicitamente il Service Worker
-        const swRegistration = await navigator.serviceWorker.register('/firebase-messaging-sw.js');
+        const swRegistration = await navigator.serviceWorker.register('./firebase-messaging-sw.js');
         console.log("Service Worker registrato con successo:", swRegistration);
 
         // 3. Richiedi i permessi
