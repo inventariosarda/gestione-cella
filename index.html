@@ -204,20 +204,18 @@ const messaging = getMessaging(app);
 
 window.attivaNotifichePush = async function() {
     try {
-        // 1. Verifica se le notifiche sono supportate
         if (!("Notification" in window)) {
             mostraNotifica("Questo browser non supporta le notifiche push.", "errore");
             return;
         }
 
-        // 2. Registra esplicitamente il Service Worker
-        const swRegistration = await navigator.serviceWorker.register('./firebase-messaging-sw.js');
+        // Calcola il percorso dinamico corretto per GitHub Pages
+        const swPath = new URL('firebase-messaging-sw.js', window.location.href).pathname;
+        const swRegistration = await navigator.serviceWorker.register(swPath);
         console.log("Service Worker registrato con successo:", swRegistration);
 
-        // 3. Richiedi i permessi
         const permission = await Notification.requestPermission();
         if (permission === 'granted') {
-            // 4. Ottieni il Token passando il Service Worker registrato
             const token = await getToken(messaging, { 
                 vapidKey: "BDpgIKu3YbiNu47seX2sR5Ic3eMh4Rv_ZA4z5G2bra2Ix4yMXyBbEAa2xdDjVX_VrQQ98CWEXTtTNHV-fZFNuVs",
                 serviceWorkerRegistration: swRegistration
@@ -240,6 +238,7 @@ window.attivaNotifichePush = async function() {
         mostraNotifica("Errore: " + (err.message || "Impossibile attivare"), "errore");
     }
 };
+
         window.db = db;
         const OPERATORE_KEY = 'cella-operatore';
 
