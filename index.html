@@ -209,13 +209,25 @@ window.attivaNotifichePush = async function() {
             return;
         }
 
-        // Calcola il percorso dinamico corretto per GitHub Pages
-        const swPath = new URL('firebase-messaging-sw.js', window.location.href).pathname;
-        const swRegistration = await navigator.serviceWorker.register(swPath);
-        console.log("Service Worker registrato con successo:", swRegistration);
+        // 1. Controlla lo stato attuale del permesso
+        let permission = Notification.permission;
 
-        const permission = await Notification.requestPermission();
+        // Se l'utente non ha ancora mai risposto, chiedi il permesso
+        if (permission === 'default') {
+            permission = await Notification.requestPermission();
+        }
+
+        // Se l'utente ha bloccato le notifiche, avvisalo con una spiegazione chiara
+        if (permission === 'denied') {
+            mostraNotifica("Notifiche bloccate nel browser. Abilitale toccando l'icona a sinistra dell'indirizzo web.", "errore");
+            return;
+        }
+
+        // 2. Se il permesso è concesso, registra il Service Worker e ottieni il Token
         if (permission === 'granted') {
+            const swPath = new URL('firebase-messaging-sw.js', window.location.href).pathname;
+            const swRegistration = await navigator.serviceWorker.register(swPath);
+
             const token = await getToken(messaging, { 
                 vapidKey: "BDpgIKu3YbiNu47seX2sR5Ic3eMh4Rv_ZA4z5G2bra2Ix4yMXyBbEAa2xdDjVX_VrQQ98CWEXTtTNHV-fZFNuVs",
                 serviceWorkerRegistration: swRegistration
@@ -230,14 +242,13 @@ window.attivaNotifichePush = async function() {
             } else {
                 mostraNotifica("Impossibile recuperare il token del dispositivo", "errore");
             }
-        } else {
-            mostraNotifica("Permesso negato. Sbloccalo dalle impostazioni del browser del telefono.", "errore");
         }
     } catch (err) {
         console.error("Errore nell'attivazione notifiche:", err);
         mostraNotifica("Errore: " + (err.message || "Impossibile attivare"), "errore");
     }
 };
+
 
         window.db = db;
         const OPERATORE_KEY = 'cella-operatore';
