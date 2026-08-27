@@ -203,25 +203,42 @@ import { getMessaging, getToken } from "https://www.gstatic.com/firebasejs/10.7.
 const messaging = getMessaging(app);
 
 window.attivaNotifichePush = async function() {
+window.attivaNotifichePush = async function() {
     try {
+        // 1. Verifica se le notifiche sono supportate
+        if (!("Notification" in window)) {
+            mostraNotifica("Questo browser non supporta le notifiche push.", "errore");
+            return;
+        }
+
+        // 2. Registra esplicitamente il Service Worker
+        const swRegistration = await navigator.serviceWorker.register('/firebase-messaging-sw.js');
+        console.log("Service Worker registrato con successo:", swRegistration);
+
+        // 3. Richiedi i permessi
         const permission = await Notification.requestPermission();
         if (permission === 'granted') {
+            // 4. Ottieni il Token passando il Service Worker registrato
             const token = await getToken(messaging, { 
-                vapidKey: "BDpgIKu3YbiNu47seX2sR5Ic3eMh4Rv_ZA4z5G2bra2Ix4yMXyBbEAa2xdDjVX_VrQQ98CWEXTtTNHV-fZFNuVs" 
+                vapidKey: "BDpgIKu3YbiNu47seX2sR5Ic3eMh4Rv_ZA4z5G2bra2Ix4yMXyBbEAa2xdDjVX_VrQQ98CWEXTtTNHV-fZFNuVs",
+                serviceWorkerRegistration: swRegistration
             });
+
             if (token) {
                 await setDoc(doc(db, "dispositivi", token), {
                     token: token,
                     aggiornatoIl: Timestamp.now()
                 });
                 mostraNotifica("Notifiche Push attivate con successo!");
+            } else {
+                mostraNotifica("Impossibile recuperare il token del dispositivo", "errore");
             }
         } else {
-            mostraNotifica("Permesso per le notifiche negato.", "errore");
+            mostraNotifica("Permesso negato. Sbloccalo dalle impostazioni del browser del telefono.", "errore");
         }
     } catch (err) {
         console.error("Errore nell'attivazione notifiche:", err);
-        mostraNotifica("Errore nell'attivazione delle notifiche", "errore");
+        mostraNotifica("Errore: " + (err.message || "Impossibile attivare"), "errore");
     }
 };
         window.db = db;
