@@ -186,7 +186,7 @@
     <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
 import { getFirestore, collection, addDoc, onSnapshot, deleteDoc, doc, updateDoc, Timestamp, enableIndexedDbPersistence, deleteField, setDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
-import { getMessaging, getToken } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-messaging.js";
+import { getMessaging, getToken, onMessage } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-messaging.js";
 
         const firebaseConfig = {
             apiKey: "AIzaSyB0daUTnfyhdyWPpkmFoPcyAguyZq63NE0",
@@ -201,6 +201,25 @@ import { getMessaging, getToken } from "https://www.gstatic.com/firebasejs/10.7.
         const app = initializeApp(firebaseConfig);
         const db = getFirestore(app);
 const messaging = getMessaging(app);
+
+// Ricezione FCM quando la web app è aperta/in primo piano.
+// In background/chiusa interviene firebase-messaging-sw.js.
+onMessage(messaging, (payload) => {
+    console.log("[FCM] Messaggio ricevuto in primo piano:", payload);
+    const title = payload.notification?.title || payload.data?.title || "Gestione Pedane";
+    const body = payload.notification?.body || payload.data?.body || "Nuovo movimento registrato";
+    if (Notification.permission === "granted") {
+        try {
+            new Notification(title, {
+                body,
+                icon: payload.notification?.icon || "/gestione-cella/icon.png",
+                tag: payload.data?.eventoId || "gestione-pedane-movimento"
+            });
+        } catch (e) {
+            console.warn("Impossibile mostrare la notifica in primo piano:", e);
+        }
+    }
+});
 
 window.attivaNotifichePush = async function() {
     try {

@@ -12,16 +12,29 @@ firebase.initializeApp({
 
 const messaging = firebase.messaging();
 
+// I messaggi che contengono un payload "notification" vengono visualizzati
+// automaticamente dal browser quando la pagina è in background/chiusa.
+// Non chiamiamo showNotification qui per evitare notifiche duplicate.
 messaging.onBackgroundMessage((payload) => {
     console.log('[firebase-messaging-sw.js] Notifica in background:', payload);
-    
-    const title = payload.notification?.title || 'Nuova Notifica';
-    const options = {
-        body: payload.notification?.body || '',
-        icon: '/gestione-cella/icon.png',
-        vibrate: [200, 100, 200],
-        data: payload.data
-    };
+});
 
-    self.registration.showNotification(title, options);
+self.addEventListener('notificationclick', (event) => {
+    event.notification.close();
+    const targetUrl = event.notification?.data?.click_action ||
+        event.notification?.data?.link || '/';
+
+    event.waitUntil(
+        clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
+            for (const client of clientList) {
+                if ('focus' in client) {
+                    if (targetUrl && 'navigate' in client) {
+                        client.navigate(targetUrl).catch(() => {});
+                    }
+                    return client.focus();
+                }
+            }
+            if (clients.openWindow) return clients.openWindow(targetUrl);
+        })
+    );
 });
