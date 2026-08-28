@@ -1,100 +1,123 @@
-const { onDocumentCreated } = require('firebase-functions/v2/firestore');
-const { setGlobalOptions } = require('firebase-functions/v2');
-const logger = require('firebase-functions/logger');
-const admin = require('firebase-admin');
+const { setGlobalOptions } = require("firebase-functions");
+const { onDocumentCreated } = require("firebase-functions/firestore");
+const { initializeApp } = require("firebase-admin/app");
+const { getFirestore } = require("firebase-admin/firestore");
+const { getMessaging } = require("firebase-admin/messaging");
+const { logger } = require("firebase-functions");
 
-admin.initializeApp();
-setGlobalOptions({ region: 'europe-west1', maxInstances: 10 });
+initializeApp();
 
-// URL della web app. Impostala con:
-// firebase functions:config:set app.url="https://TUO-SITO"
-// oppure, per Functions v2, usa l'env APP_URL durante il deploy.
-const APP_URL = process.env.APP_URL || 'https://inventariosarda.github.io/gestione-cella/';
+const db = getFirestore();
+const messaging = getMessaging();
 
-exports.inviaNotificaMovimento = onDocumentCreated('eventi/{eventoId}', async (event) => {
-  const data = event.data?.data();
-  if (!data) return;
+setGlobalOptions({
+  maxInstances: 10,
+  region: "europe-west1"
+});
 
-  // Notifichiamo soltanto entrate e uscite.
-  if (data.tipo !== 'ENTRATA' && data.tipo !== 'USCITA') return;
+exports.inviaNotificaMovimento = onDocumentCreated(
+  "eventi/{eventoId}",
+  async (event) => {
+    const snapshot = event.data;
 
-  const tipo = data.tipo === 'ENTRATA' ? '📥 ENTRATA' : '📤 USCITA';
-  const operatore = data.operatore ? ` — ${data.operatore}` : '';
-  const prodotto = data.nomeProdotto || 'Prodotto';
-  const lotto = data.lotto ? ` — Lotto ${data.lotto}` : '';
-  const quantita = Number(data.quantita || 0);
+    if (!snapshot) {
+      logger.warn("Evento senza dati");
+      return;
+    }
 
-  const title = `${tipo}: ${prodotto}`;
-  const body = `${quantita} pedan${quantita === 1 ? 'a' : 'e'}${lotto}${operatore}`;
+    const evento = snapshot.data();
 
-  const snapshot = await admin.firestore().collection('dispositivi').get();
-  if (snapshot.empty) {
-    logger.info('Nessun dispositivo registrato per le notifiche.');
-    return;
-  }
+    // Invia notifiche SOLO per ENTRATA e USCITA
+    if (evento.tipo !== "ENTRATA" && evento.tipo !== "USCITA") {
+      logger.info(`Evento ignorato: ${evento.tipo}`);
+      return;
+    }
 
-  const tokens = [];
-  snapshot.forEach((doc) => {
-    const token = doc.data()?.token || doc.id;
-    if (token) tokens.push({ token, ref: doc.ref });
-  });
+    logger.info("Nuovo movimento", evento);
 
-  // FCM multicast supporta max 500 token per chiamata.
-  const chunks = [];
-  for (let i = 0; i < tokens.length; i += 500) chunks.push(tokens.slice(i, i + 500));
+    // Recupera tutti i dispositivi registrati
+    const dispositiviSnapshot = await db.collection("dispositivi").get();
 
-  let sent = 0;
-  let failed = 0;
+    if (dispositiviSnapshot.empty) {
+      logger.info("Nessun dispositivo registrato per le notifiche");
+      return;
+    }
 
-  for (const chunk of chunks) {
-    const response = await admin.messaging().sendEachForMulticast({
-      tokens: chunk.map(x => x.token),
+    const tokens = [];
+
+    dispositiviSnapshot.forEach((doc) => {
+      const dati = doc.data();
+
+      if (dati.token) {
+        tokens.push(dati.token);
+      }
+    });
+
+    if (tokens.length === 0) {
+      logger.info("Nessun token FCM disponibile");
+      return;
+    }
+
+    const emoji = evento.tipo === "ENTRATA" ? "📥" : "📤";
+    const tipoTesto = evento.tipo === "ENTRATA" ? "ENTRATA" : "USCITA";
+
+    const title = `${emoji} ${tipoTesto} - Gestione Pedane`;
+
+    const body =
+      `${evento.nomeProdotto || "Prodotto"} · ` +
+      `${evento.quantita || 0} pedane · ` +
+      `Lotto ${evento.lotto || "-"}`;
+
+    const message = {
       notification: {
         title,
         body
       },
       data: {
-        eventoId: event.params.eventoId,
-        tipo: String(data.tipo),
-        nomeProdotto: String(prodotto),
-        quantita: String(quantita),
-        lotto: String(data.lotto || ''),
-        operatore: String(data.operatore || ''),
-        link: APP_URL
+        tipo: String(evento.tipo || ""),
+        idProdotto: String(evento.idProdotto || ""),
+        nomeProdotto: String(evento.nomeProdotto || ""),
+        lotto: String(evento.lotto || ""),
+        quantita: String(evento.quantita || ""),
+        eventoId: String(event.params.eventoId || "")
       },
       webpush: {
         fcmOptions: {
-          link: APP_URL
-        },
-        notification: {
-          title,
-          body,
-          icon: `${APP_URL.replace(/\/$/, '')}/icon.png`,
-          tag: `movimento-${event.params.eventoId}`
+          link: "https://inventariosarda.github.io/gestione-cella/"
         }
-      }
-    });
+      },
+      tokens
+    };
 
-    sent += response.successCount;
-    failed += response.failureCount;
+    const response = await messaging.sendEachForMulticast(message);
 
-    // Elimina token non più validi, così la lista resta pulita.
-    for (let i = 0; i < response.responses.length; i++) {
-      const result = response.responses[i];
-      if (!result.success) {
-        const code = result.error?.code || '';
-        if (code.includes('registration-token-not-registered') || code.includes('invalid-registration-token')) {
-          await chunk[i].ref.delete().catch(() => {});
+    logger.info(
+      `Notifiche inviate: ${response.successCount}, ` +
+      `fallite: ${response.failureCount}`
+    );
+
+    // Rimuove automaticamente i token non più validi
+    if (response.failureCount > 0) {
+      const eliminazioni = [];
+
+      response.responses.forEach((result, index) => {
+        if (!result.success) {
+          const errorCode = result.error?.code || "";
+
+          if (
+            errorCode.includes("registration-token-not-registered") ||
+            errorCode.includes("invalid-registration-token")
+          ) {
+            const token = tokens[index];
+
+            eliminazioni.push(
+              db.collection("dispositivi").doc(token).delete()
+            );
+          }
         }
-      }
+      });
+
+      await Promise.all(eliminazioni);
     }
   }
-
-  logger.info('Notifica movimento inviata', {
-    eventoId: event.params.eventoId,
-    tipo: data.tipo,
-    prodotto,
-    sent,
-    failed
-  });
-});
+);
